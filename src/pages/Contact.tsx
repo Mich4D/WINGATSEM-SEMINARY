@@ -1,0 +1,175 @@
+import React, { useState } from 'react';
+import { Mail, Phone, MapPin, Send, CheckCircle } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+
+export default function Contact() {
+  const [formData, setFormData] = useState({ name: '', email: '', subject: '', message: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.email || !formData.message) return;
+
+    setIsSubmitting(true);
+    try {
+      // Write to the 'mail' table
+      const { error } = await supabase.from('mail').insert([{
+        to: 'wingatsem@gmail.com',
+        subject: `Contact Form: ${formData.subject || 'New Message from ' + formData.name}`,
+        body: `Name: ${formData.name}\nEmail: ${formData.email}\n\nMessage:\n${formData.message}`,
+        status: 'pending'
+      }]);
+      
+      if (error) throw error;
+      
+      setIsSuccess(true);
+      setFormData({ name: '', email: '', subject: '', message: '' });
+    } catch (error) {
+      console.error("Error sending message:", error);
+      alert("Failed to send message. Please try again or email us directly at wingatsem@gmail.com");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="bg-slate-50 min-h-screen py-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="text-center mb-16">
+          <h1 className="text-4xl md:text-5xl font-serif font-bold text-slate-900 mb-4">Contact Us</h1>
+          <div className="w-24 h-1 bg-yellow-600 mx-auto rounded-full mb-6"></div>
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+            We're here to answer any questions you may have about our programmes, admissions, or campus life.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+          <div className="lg:col-span-1 space-y-8">
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-6">
+              <div className="w-14 h-14 bg-yellow-50 text-yellow-600 rounded-xl flex items-center justify-center shrink-0">
+                <Phone size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 mb-2">Phone</h3>
+                <a href="tel:08063885201" className="block text-slate-600 mb-2 hover:text-yellow-600 transition-colors">08063885201</a>
+                <a href="https://wa.me/2349067505783" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 text-slate-600 hover:text-green-600 transition-colors font-medium">
+                  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round" className="text-green-500"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                  09067505783
+                </a>
+              </div>
+            </div>
+            
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-6">
+              <div className="w-14 h-14 bg-yellow-50 text-yellow-600 rounded-xl flex items-center justify-center shrink-0">
+                <Mail size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 mb-2">Email</h3>
+                <a href="mailto:wingatsem@gmail.com" className="text-yellow-600 hover:text-yellow-700 font-medium">wingatsem@gmail.com</a>
+              </div>
+            </div>
+            
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 flex items-start gap-6">
+              <div className="w-14 h-14 bg-yellow-50 text-yellow-600 rounded-xl flex items-center justify-center shrink-0">
+                <MapPin size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 mb-2">Location</h3>
+                <p className="text-slate-600 leading-relaxed">
+                  WINNING GATE CHRISTIAN THEOLOGICAL SEMINARY<br />
+                  3, Church Street, Aboru Iyana Ipaja,<br />
+                  Lagos State Nigeria
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="lg:col-span-2">
+            <div className="bg-white p-10 md:p-12 rounded-3xl shadow-sm border border-slate-100">
+              <h2 className="text-2xl font-bold text-slate-900 mb-8">Send us a Message</h2>
+              
+              {isSuccess ? (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center">
+                  <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CheckCircle size={32} />
+                  </div>
+                  <h3 className="text-xl font-bold text-green-800 mb-2">Message Sent Successfully!</h3>
+                  <p className="text-green-700 mb-6">Thank you for reaching out. We will get back to you shortly.</p>
+                  <button 
+                    onClick={() => setIsSuccess(false)}
+                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Send Another Message
+                  </button>
+                </div>
+              ) : (
+                <form className="space-y-6" onSubmit={handleSubmit}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="name" className="block text-sm font-medium text-slate-700 mb-2">Full Name</label>
+                      <input 
+                        type="text" 
+                        id="name" 
+                        required
+                        value={formData.name}
+                        onChange={(e) => setFormData({...formData, name: e.target.value})}
+                        className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-yellow-600 focus:border-transparent outline-none transition-all"
+                        placeholder="John Doe"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">Email Address</label>
+                      <input 
+                        type="email" 
+                        id="email" 
+                        required
+                        value={formData.email}
+                        onChange={(e) => setFormData({...formData, email: e.target.value})}
+                        className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-yellow-600 focus:border-transparent outline-none transition-all"
+                        placeholder="john@example.com"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="subject" className="block text-sm font-medium text-slate-700 mb-2">Subject</label>
+                    <input 
+                      type="text" 
+                      id="subject" 
+                      value={formData.subject}
+                      onChange={(e) => setFormData({...formData, subject: e.target.value})}
+                      className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-yellow-600 focus:border-transparent outline-none transition-all"
+                      placeholder="How can we help you?"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label htmlFor="message" className="block text-sm font-medium text-slate-700 mb-2">Message</label>
+                    <textarea 
+                      id="message" 
+                      required
+                      rows={6}
+                      value={formData.message}
+                      onChange={(e) => setFormData({...formData, message: e.target.value})}
+                      className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-yellow-600 focus:border-transparent outline-none transition-all resize-none"
+                      placeholder="Write your message here..."
+                    ></textarea>
+                  </div>
+                  
+                  <button 
+                    type="submit" 
+                    disabled={isSubmitting}
+                    className="w-full md:w-auto inline-flex justify-center items-center gap-2 bg-yellow-600 hover:bg-yellow-700 text-white px-8 py-4 rounded-lg font-bold transition-colors shadow-md disabled:opacity-70"
+                  >
+                    {isSubmitting ? 'Sending...' : 'Send Message'} {!isSubmitting && <Send size={18} />}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

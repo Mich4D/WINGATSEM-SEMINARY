@@ -1,0 +1,10 @@
+{
+  "name": " WINGATSEM SEMINARY",
+  "description": "Winning Gate Christian Theological Seminary - Theological Training Fully Loaded in English & Yoruba for Effective Service.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "display-capture"
+  ],
+  "majorCapabilities": []
+}
