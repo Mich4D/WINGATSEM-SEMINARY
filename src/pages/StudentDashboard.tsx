@@ -383,32 +383,42 @@ export default function StudentDashboard() {
         }
       };
 
+      // Helper to add timeout to any promise
+      const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> => {
+        return Promise.race([
+          promise,
+          new Promise<T>((_, reject) => 
+            setTimeout(() => reject(new Error(`${label} taking too long. Please check your internet connection or try smaller files.`)), timeoutMs)
+          )
+        ]);
+      };
+
       // Parallelize uploads to speed up the process
       const uploadPromises: Promise<void>[] = [];
 
       if (profileImageFile) {
-        uploadPromises.push(validateAndUpload(profileImageFile, `${user.id}/profile_${Date.now()}`, "Profile Picture").then(url => { profileImageUrl = url; }));
+        uploadPromises.push(withTimeout(validateAndUpload(profileImageFile, `${user.id}/profile_${Date.now()}`, "Profile Picture").then(url => { profileImageUrl = url; }), 60000, "Profile Picture Upload"));
       }
       if (refLetter1File) {
-        uploadPromises.push(validateAndUpload(refLetter1File, `${user.id}/ref1_${Date.now()}.pdf`, "Reference Letter 1").then(url => { referenceLetter1Url = url; }));
+        uploadPromises.push(withTimeout(validateAndUpload(refLetter1File, `${user.id}/ref1_${Date.now()}.pdf`, "Reference Letter 1").then(url => { referenceLetter1Url = url; }), 60000, "Reference Letter 1 Upload"));
       }
       if (refLetter2File) {
-        uploadPromises.push(validateAndUpload(refLetter2File, `${user.id}/ref2_${Date.now()}.pdf`, "Reference Letter 2").then(url => { referenceLetter2Url = url; }));
+        uploadPromises.push(withTimeout(validateAndUpload(refLetter2File, `${user.id}/ref2_${Date.now()}.pdf`, "Reference Letter 2").then(url => { referenceLetter2Url = url; }), 60000, "Reference Letter 2 Upload"));
       }
       if (baptismCertFile) {
-        uploadPromises.push(validateAndUpload(baptismCertFile, `${user.id}/baptism_${Date.now()}`, "Baptism Certificate").then(url => { baptismCertificateUrl = url; }));
+        uploadPromises.push(withTimeout(validateAndUpload(baptismCertFile, `${user.id}/baptism_${Date.now()}`, "Baptism Certificate").then(url => { baptismCertificateUrl = url; }), 60000, "Baptism Certificate Upload"));
       }
       if (academicCredentialFile) {
-        uploadPromises.push(validateAndUpload(academicCredentialFile, `${user.id}/academic_${Date.now()}`, "Academic Credential").then(url => { academicCredentialUrl = url; }));
+        uploadPromises.push(withTimeout(validateAndUpload(academicCredentialFile, `${user.id}/academic_${Date.now()}`, "Academic Credential").then(url => { academicCredentialUrl = url; }), 60000, "Academic Credential Upload"));
       }
       if (diplomaFile) {
-        uploadPromises.push(validateAndUpload(diplomaFile, `${user.id}/diploma_${Date.now()}`, "Diploma").then(url => { diplomaUrl = url; }));
+        uploadPromises.push(withTimeout(validateAndUpload(diplomaFile, `${user.id}/diploma_${Date.now()}`, "Diploma").then(url => { diplomaUrl = url; }), 60000, "Diploma Upload"));
       }
       if (bachelorFile) {
-        uploadPromises.push(validateAndUpload(bachelorFile, `${user.id}/bachelor_${Date.now()}`, "Bachelor Degree").then(url => { bachelorUrl = url; }));
+        uploadPromises.push(withTimeout(validateAndUpload(bachelorFile, `${user.id}/bachelor_${Date.now()}`, "Bachelor Degree").then(url => { bachelorUrl = url; }), 60000, "Bachelor Degree Upload"));
       }
       if (masterFile) {
-        uploadPromises.push(validateAndUpload(masterFile, `${user.id}/master_${Date.now()}`, "Master Degree").then(url => { masterUrl = url; }));
+        uploadPromises.push(withTimeout(validateAndUpload(masterFile, `${user.id}/master_${Date.now()}`, "Master Degree").then(url => { masterUrl = url; }), 60000, "Master Degree Upload"));
       }
 
       await Promise.all(uploadPromises);
@@ -456,10 +466,10 @@ export default function StudentDashboard() {
 
       console.log("Updating Supabase document with upsert...");
       // Save data using upsert to handle cases where the row might not exist yet
-      const { error } = await supabase.from('users').upsert({
+      const { error } = await withTimeout(supabase.from('users').upsert({
         id: user.id,
         ...updateData
-      });
+      }), 15000, "Database Update");
       if (error) throw error;
       console.log("Supabase upsert successful.");
 

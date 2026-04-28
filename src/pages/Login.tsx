@@ -13,12 +13,24 @@ export default function Login() {
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(() => {
     if (typeof window === 'undefined') return false;
+    if ((window as any).__IS_PASSWORD_RECOVERY) return true;
     const hasRecoveryHash = window.location.hash && (window.location.hash.includes('type=recovery') || window.location.hash.includes('access_token='));
     const hasRecoverySearch = window.location.search && window.location.search.includes('type=recovery');
     return !!(hasRecoveryHash || hasRecoverySearch);
   });
   const [resetSent, setResetSent] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    try {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const searchParams = new URLSearchParams(window.location.search);
+      const errorDesc = hashParams.get('error_description') || searchParams.get('error_description');
+      if (errorDesc) {
+        return decodeURIComponent(errorDesc.replace(/\+/g, ' '));
+      }
+    } catch (e) {}
+    return '';
+  });
   const [loading, setLoading] = useState(false);
   
   // Replace email with identifier (email or reg number)
@@ -89,7 +101,8 @@ export default function Login() {
 
   // Check login redirection & 2FA requirement
   React.useEffect(() => {
-    const isActuallyResetting = window.location.hash.includes('type=recovery') || 
+    const isActuallyResetting = (window as any).__IS_PASSWORD_RECOVERY ||
+                               window.location.hash.includes('type=recovery') || 
                                window.location.hash.includes('access_token=') ||
                                isResettingPassword ||
                                isPasswordRecovery;
@@ -121,7 +134,7 @@ export default function Login() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(emailToUse, {
-        redirectTo: `${window.location.origin}/login`,
+        redirectTo: `${window.location.origin}/login?type=recovery`,
       });
       if (error) throw error;
       setResetSent(true);
@@ -154,6 +167,7 @@ export default function Login() {
       await supabase.auth.signOut();
       setIsResettingPassword(false);
       setIsPasswordRecovery(false);
+      (window as any).__IS_PASSWORD_RECOVERY = false;
       setIsLogin(true);
       setNewPassword('');
     } catch (err: any) {

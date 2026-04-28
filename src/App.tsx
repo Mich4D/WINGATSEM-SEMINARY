@@ -7,11 +7,17 @@ const RecoveryGate = () => {
   const location = useLocation();
 
   useEffect(() => {
-    // If we land anywhere with a recovery hash, force redirect to /login
-    if (window.location.hash.includes('type=recovery') || window.location.hash.includes('access_token=')) {
+    // If we land anywhere with a recovery hash or search param, force redirect to /login
+    const hasRecovery = (window as any).__IS_PASSWORD_RECOVERY || 
+                       window.location.hash.includes('type=recovery') || 
+                       window.location.hash.includes('access_token=') || 
+                       location.search.includes('type=recovery') || 
+                       location.search.includes('error_code=');
+    
+    if (hasRecovery) {
       if (location.pathname !== '/login') {
-        console.log('Recovery hash detected, redirecting to login page');
-        navigate('/login' + window.location.hash);
+        console.log('Recovery param detected, redirecting to login page');
+        navigate('/login' + location.search + window.location.hash);
       }
     }
   }, [location, navigate]);

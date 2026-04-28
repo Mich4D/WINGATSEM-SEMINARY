@@ -22,6 +22,7 @@ export default function AdminDashboard() {
   const [teachers, setTeachers] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [departmentDurations, setDepartmentDurations] = useState<Record<string, number>>({});
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -182,32 +183,40 @@ export default function AdminDashboard() {
     };
 
     const fetchSettings = async () => {
-      const { data } = await supabase.from('settings').select('*').eq('id', 'global').single();
+      const { data } = await supabase.from('settings').select('*').in('id', ['global', 'department_durations']);
       if (data) {
-        setSettings({
-          logoUrl: data.logoUrl || data.logo_url || '',
-          rectorImageUrl: data.rectorImageUrl || data.rector_image_url || data.rectorUrl || '',
-          heroBgUrl: data.heroBgUrl || data.hero_bg_url || '',
-          liveStreamUrl: data.liveStreamUrl || data.live_stream_url || '',
-          anthemUrl: data.anthemUrl || data.anthem_url || '',
-          anthemTitle: data.anthemTitle || data.anthem_title || 'School Anthem',
-          flutterwavePublicKey: data.flutterwave_public_key || data.flutterwavePublicKey || '',
-          isAdmissionOpen: data.is_admission_open ?? true,
-          importantDates: data.important_dates || {
-            applicationOpens: 'Aug 15',
-            applicationDeadline: 'Oct 30',
-            orientationBegins: 'Nov 15'
-          },
-          fees: data.fees || {
-            registration: 10000,
-            tuition: {
-              diploma: 100000,
-              bachelor: 120000,
-              master: 150000,
-              doctorate: 180000
+        const globalSettings = data.find(s => s.id === 'global');
+        if (globalSettings) {
+          setSettings({
+            logoUrl: globalSettings.logoUrl || globalSettings.logo_url || '',
+            rectorImageUrl: globalSettings.rectorImageUrl || globalSettings.rector_image_url || globalSettings.rectorUrl || '',
+            heroBgUrl: globalSettings.heroBgUrl || globalSettings.hero_bg_url || '',
+            liveStreamUrl: globalSettings.liveStreamUrl || globalSettings.live_stream_url || '',
+            anthemUrl: globalSettings.anthemUrl || globalSettings.anthem_url || '',
+            anthemTitle: globalSettings.anthemTitle || globalSettings.anthem_title || 'School Anthem',
+            flutterwavePublicKey: globalSettings.flutterwave_public_key || globalSettings.flutterwavePublicKey || '',
+            isAdmissionOpen: globalSettings.is_admission_open ?? true,
+            importantDates: globalSettings.important_dates || {
+              applicationOpens: 'Aug 15',
+              applicationDeadline: 'Oct 30',
+              orientationBegins: 'Nov 15'
+            },
+            fees: globalSettings.fees || {
+              registration: 10000,
+              tuition: {
+                diploma: 100000,
+                bachelor: 120000,
+                master: 150000,
+                doctorate: 180000
+              }
             }
-          }
-        });
+          });
+        }
+        
+        const durationsSettings = data.find(s => s.id === 'department_durations');
+        if (durationsSettings && durationsSettings.value) {
+          setDepartmentDurations(durationsSettings.value as Record<string, number>);
+        }
       }
     };
 
@@ -605,6 +614,34 @@ export default function AdminDashboard() {
     // Refresh
     const { data } = await supabase.from('departments').select('*');
     if (data) setDepartments(data);
+  };
+
+  const handleSaveDurations = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    const btn = e.currentTarget;
+    const originalText = btn.innerText;
+    btn.innerText = 'Saving...';
+    btn.disabled = true;
+    try {
+      await supabase.from('settings').upsert({
+        id: 'department_durations',
+        value: departmentDurations
+      });
+      showToast("Department class durations saved successfully!");
+      btn.innerText = 'Saved!';
+      btn.classList.add('bg-green-600', 'hover:bg-green-700', 'text-white');
+      btn.classList.remove('bg-white', 'text-slate-700', 'border-slate-200');
+      setTimeout(() => {
+        btn.innerText = originalText;
+        btn.classList.remove('bg-green-600', 'hover:bg-green-700', 'text-white');
+        btn.classList.add('bg-white', 'text-slate-700', 'border-slate-200');
+        btn.disabled = false;
+      }, 3000);
+    } catch (error) {
+      console.error("Error saving durations:", error);
+      showToast("Failed to save durations.", "error");
+      btn.innerText = originalText;
+      btn.disabled = false;
+    }
   };
 
   const handleSaveFees = async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -1640,14 +1677,41 @@ export default function AdminDashboard() {
                       key={dept.id} 
                       className="p-4 border border-slate-100 rounded-xl bg-slate-50 flex items-center justify-between"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-bold text-slate-400 w-5 h-5 flex items-center justify-center bg-white border border-slate-200 rounded-full">{idx + 1}</span>
-                        <span className="font-bold text-slate-900">{dept.name}</span>
+                      <div className="flex flex-col gap-2 w-full">
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-bold text-slate-400 w-5 h-5 flex items-center justify-center bg-white border border-slate-200 rounded-full">{idx + 1}</span>
+                            <span className="font-bold text-slate-900">{dept.name}</span>
+                          </div>
+                          <span className="bg-white text-slate-600 text-xs font-bold px-2 py-1 rounded uppercase border border-slate-200">{dept.code}</span>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <label className="text-xs font-bold text-slate-500">PROGRAM DURATION (YEARS):</label>
+                          <input 
+                            type="number"
+                            min="1"
+                            max="10"
+                            placeholder="e.g. 4"
+                            className="px-2 py-1 border border-slate-200 rounded outline-none w-20 text-sm focus:border-yellow-600"
+                            value={departmentDurations[dept.code] || ''}
+                            onChange={(e) => setDepartmentDurations(prev => ({...prev, [dept.code]: parseInt(e.target.value) || ''}))}
+                          />
+                        </div>
                       </div>
-                      <span className="bg-white text-slate-600 text-xs font-bold px-2 py-1 rounded uppercase border border-slate-200">{dept.code}</span>
                     </div>
                   ))}
                 </div>
+                
+                {departments.length > 0 && (
+                  <div className="mt-6 flex justify-end">
+                    <button 
+                      onClick={handleSaveDurations}
+                      className="bg-slate-900 text-white px-6 py-2 rounded-lg font-medium hover:bg-slate-800 transition-colors"
+                    >
+                      Save Class Durations
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

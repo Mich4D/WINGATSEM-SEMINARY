@@ -1,5 +1,14 @@
 import React, {StrictMode, ErrorInfo, ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
+
+// Capture recovery state before Supabase or anything else can strip the hash
+const hasRecovery = window.location.hash.includes('type=recovery') || 
+                    window.location.search.includes('type=recovery') || 
+                    window.location.hash.includes('access_token=');
+if (hasRecovery) {
+  (window as any).__IS_PASSWORD_RECOVERY = true;
+}
+
 import App from './App.tsx';
 import './index.css';
 

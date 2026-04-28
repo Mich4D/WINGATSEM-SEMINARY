@@ -343,6 +343,32 @@ export default function Home() {
                     </motion.div>
                   </AnimatePresence>
                 </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 1.4, duration: 0.8 }}
+                  className="mt-6 flex items-center justify-center gap-4 p-4 bg-slate-900/60 border border-slate-700/50 rounded-xl backdrop-blur-md w-full shadow-lg"
+                >
+                  <div className="flex -space-x-3">
+                    <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-900 flex items-center justify-center overflow-hidden">
+                      <img src="https://i.pravatar.cc/100?img=33" alt="Student" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-900 flex items-center justify-center overflow-hidden">
+                      <img src="https://i.pravatar.cc/100?img=12" alt="Student" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="w-10 h-10 rounded-full bg-slate-800 border-2 border-slate-900 flex items-center justify-center overflow-hidden">
+                      <img src="https://i.pravatar.cc/100?img=43" alt="Student" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="w-10 h-10 rounded-full bg-yellow-600 border-2 border-slate-900 flex items-center justify-center">
+                      <span className="text-[10px] font-bold text-white tracking-tighter">+1k</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-white font-bold text-sm leading-tight text-balance">Join our trusted community</span>
+                    <span className="text-yellow-500 font-semibold text-xs mt-0.5">of +1000 global leaders</span>
+                  </div>
+                </motion.div>
               </div>
             </div>
           </div>
