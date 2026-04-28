@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Book, Award, CreditCard, Download, User, CheckCircle, AlertCircle, Video, Lock, FileText, ChevronRight, ChevronLeft } from 'lucide-react';
-import Webcam from 'react-webcam';
 import { Country, State, City } from 'country-state-city';
 
 import PaymentButton from '../components/PaymentButton';
@@ -16,19 +15,11 @@ export default function StudentDashboard() {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [paymentProcessing, setPaymentProcessing] = useState<string | null>(null);
-  
-  // Class Join Verification State
-  const [showJoinModal, setShowJoinModal] = useState(false);
-  const [verifyRegNumber, setVerifyRegNumber] = useState('');
-  const [verifyEmail, setVerifyEmail] = useState('');
-  const [cameraError, setCameraError] = useState(false);
-  const [verifyError, setVerifyError] = useState('');
-  const [isVerifying, setIsVerifying] = useState(false);
-  const webcamRef = React.useRef<Webcam>(null);
-  const [hasInitialized, setHasInitialized] = useState(false);
+  const navigate = useNavigate();
 
   // Download OTP states
   const [showOtpModal, setShowOtpModal] = useState(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
@@ -512,152 +503,6 @@ export default function StudentDashboard() {
     });
 
     return totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : '0.00';
-  };
-
-  const handleVerifyAndJoin = async () => {
-    if (!verifyRegNumber.trim()) {
-      setVerifyError('Please enter your registration number.');
-      return;
-    }
-    
-    if (verifyRegNumber.trim() !== profile?.registrationNumber) {
-      setVerifyError('Invalid registration number. Please check and try again.');
-      return;
-    }
-
-    if (cameraError) {
-      if (!verifyEmail.trim()) {
-        setVerifyError('Please enter your email address to verify.');
-        return;
-      }
-      if (verifyEmail.trim().toLowerCase() !== user?.email?.toLowerCase()) {
-        setVerifyError('Invalid email address. Please check and try again.');
-        return;
-      }
-    } else {
-      const imageSrc = webcamRef.current?.getScreenshot();
-      if (!imageSrc) {
-        setVerifyError('Failed to capture selfie. Please ensure your camera is enabled, or click "Camera not working?" below.');
-        return;
-      }
-    }
-    
-    setIsVerifying(true);
-    setVerifyError('');
-    
-    try {
-      let selfieUrl = null;
-      
-      if (!cameraError) {
-        const imageSrc = webcamRef.current?.getScreenshot();
-        if (imageSrc) {
-          // Convert base64 to blob
-          const res = await fetch(imageSrc);
-          const blob = await res.blob();
-          
-          // Upload selfie to storage
-          const selfiePath = `${user?.id}_${Date.now()}.jpg`;
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('App_files')
-            .upload(selfiePath, blob, { upsert: true });
-            
-          if (uploadError) throw uploadError;
-            
-          const { data: { publicUrl } } = supabase.storage
-            .from('App_files')
-            .getPublicUrl(selfiePath);
-          selfieUrl = publicUrl;
-        }
-      }
-      
-      // Log attendance to Supabase
-      await supabase.from('attendance').insert({
-        student_id: user?.id,
-        student_name: profile?.displayName,
-        registration_number: profile?.registrationNumber,
-        department_code: profile?.departmentCode,
-        level: profile?.level,
-        selfie_url: selfieUrl,
-        type: 'live_class_join'
-      });
-
-      // Call the external API for attendance
-      try {
-        await fetch('/mark-attendance', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            regNumber: profile?.registrationNumber,
-            level: profile?.level,
-            department: profile?.departmentCode
-          })
-        });
-      } catch (err) {
-        console.error("Failed to call /mark-attendance endpoint", err);
-      }
-      
-      // Close modal and redirect
-      setShowJoinModal(false);
-      
-      const getRoomName = (deptCode: string, programType: string) => {
-        if (!deptCode || !programType) return "wgts-pending-class";
-        return `wgts-${deptCode.toLowerCase()}-${programType.toLowerCase()}-class`;
-      };
-      
-      const startLiveClass = () => {
-        const roomName = getRoomName(profile?.departmentCode || '', profile?.programType || '');
-        const domain = "meet.jit.si";
-
-        // Configure Jitsi to hide invite functions, start muted, and hide the link
-        const configOptions = [
-          "config.prejoinPageEnabled=false",
-          "config.prejoinConfig.enabled=false",
-          "config.startWithVideoMuted=true",
-          "config.startWithAudioMuted=true",
-          "config.disableDeepLinking=true",
-          "config.disableInviteFunctions=true",
-          "config.toolbarButtons=%5B%5D",
-          "config.disableToolbarAccess=true",
-          "interfaceConfig.HIDE_INVITE_MORE_HEADER=true",
-          "interfaceConfig.TOOLBAR_BUTTONS=%5B%5D",
-          "interfaceConfig.MOBILE_APP_PROMO=false",
-          "interfaceConfig.SHOW_CHROME_EXTENSION_BANNER=false",
-          "config.hideConferenceSubject=true",
-          "config.hideConferenceTimer=true"
-        ].join("&");
-
-        const iframe = `
-          <iframe
-            src="https://${domain}/${roomName}#${configOptions}"
-            width="100%"
-            height="600"
-            allow="camera; microphone; fullscreen; display-capture; autoplay"
-            style="border:0; border-radius: 8px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);"
-          >
-          </iframe>
-        `;
-
-        const container = document.getElementById("liveClassContainer");
-        if (container) {
-          container.innerHTML = iframe;
-          // Scroll to the container
-          container.scrollIntoView({ behavior: 'smooth' });
-        }
-      };
-
-      startLiveClass();
-    } catch (error: any) {
-      console.error("Verification error:", error);
-      if (error.code === 'storage/retry-limit-exceeded' || error.message.includes('retry time')) {
-        setVerifyError('Supabase Storage is not enabled or reached its limit. The admin needs to check the Supabase dashboard.');
-      } else {
-        setVerifyError('An error occurred during verification. Please try again.');
-      }
-    } finally {
-      setIsVerifying(false);
-    }
   };
 
   if (loading) return <div className="p-8 text-center">Loading dashboard...</div>;
@@ -1320,9 +1165,6 @@ export default function StudentDashboard() {
               </div>
             ) : (
               <>
-                {/* Live Class Container */}
-                <div id="liveClassContainer" className="mb-6 rounded-lg overflow-hidden shadow-md"></div>
-                
                 <div className="bg-white rounded-lg shadow-md border border-slate-100 p-6">
                   <h2 className="text-xl font-bold text-yellow-600 mb-4">Welcome to your Dashboard</h2>
                   <p className="text-slate-600">
@@ -1352,7 +1194,7 @@ export default function StudentDashboard() {
                     <h2 className="text-xl font-bold text-yellow-600">My Courses</h2>
                 {profile?.learningMode === 'online' && profile?.isApproved && (
                   <button 
-                    onClick={() => setShowJoinModal(true)}
+                    onClick={() => navigate(`/class/${profile?.programType || 'general'}`)}
                     className="bg-yellow-600 hover:bg-yellow-700 text-white px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-colors"
                   >
                     <Video size={16} />
@@ -1744,97 +1586,6 @@ export default function StudentDashboard() {
                   Protecting your academic records. If you didn't receive the code, check your spam folder or try again.
                 </p>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Join Class Verification Modal */}
-      {showJoinModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-100 bg-slate-50">
-              <h3 className="text-xl font-bold text-slate-900">Class Verification</h3>
-              <p className="text-sm text-slate-500 mt-1">Please verify your identity to join the live class.</p>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              {verifyError && (
-                <div className="bg-red-50 border-l-4 border-red-500 p-3 rounded text-sm text-red-700">
-                  {verifyError}
-                </div>
-              )}
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Registration Number</label>
-                <input
-                  type="text"
-                  value={verifyRegNumber}
-                  onChange={(e) => setVerifyRegNumber(e.target.value)}
-                  placeholder="e.g. WGTS/DP/26/0001"
-                  className="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-yellow-600 focus:border-transparent outline-none"
-                />
-              </div>
-              
-              <div>
-                {cameraError ? (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Email Address (Fallback Verification)</label>
-                    <input
-                      type="email"
-                      value={verifyEmail}
-                      onChange={(e) => setVerifyEmail(e.target.value)}
-                      placeholder="Enter your registered email"
-                      className="w-full border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-yellow-600 focus:border-transparent outline-none mb-2"
-                    />
-                    <p className="text-xs text-slate-500 text-center">Since your camera is not working, please verify your email address instead.</p>
-                  </div>
-                ) : (
-                  <>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Take a Selfie</label>
-                    <div className="rounded-lg overflow-hidden border-2 border-slate-200 bg-slate-100 relative aspect-video">
-                      {/* @ts-ignore - react-webcam types are overly strict in this version */}
-                      <Webcam
-                        audio={false}
-                        ref={webcamRef}
-                        screenshotFormat="image/jpeg"
-                        className="w-full h-full object-cover"
-                        videoConstraints={{ facingMode: "user" }}
-                      />
-                    </div>
-                    <p className="text-xs text-slate-500 mt-2 text-center">Ensure your face is clearly visible in the frame.</p>
-                  </>
-                )}
-                <button 
-                  onClick={() => setCameraError(!cameraError)}
-                  className="text-xs text-blue-600 hover:text-blue-800 mt-3 w-full text-center"
-                >
-                  {cameraError ? "Try camera again" : "Camera not working?"}
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowJoinModal(false);
-                  setVerifyError('');
-                  setVerifyRegNumber('');
-                  setVerifyEmail('');
-                  setCameraError(false);
-                }}
-                className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-medium transition-colors"
-                disabled={isVerifying}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleVerifyAndJoin}
-                disabled={isVerifying}
-                className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-70"
-              >
-                {isVerifying ? 'Verifying...' : 'Verify & Join'}
-              </button>
             </div>
           </div>
         </div>

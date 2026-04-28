@@ -55,21 +55,28 @@ const bachelorCourses = [
 ];
 
 const masterCourses = [
-  { code: "MTH 501", title: "ADVANCED HERMENEUTICS", description: "In-depth study of biblical interpretation methods with a focus on original languages and historical context." },
-  { code: "MTH 502", title: "CONTEMPORARY THEOLOGY", description: "Analysis of modern theological movements, thinkers, and their impact on the global church." },
-  { code: "MTH 503", title: "ADVANCED PASTORAL COUNSELLING", description: "Integration of theological principles and psychological insights for advanced pastoral care." },
-  { code: "MTH 504", title: "CHURCH GROWTH STRATEGIES", description: "Biblical and practical examination of healthy church growth, leadership structures, and missional focus." },
-  { code: "MTH 505", title: "RESEARCH METHODOLOGY", description: "Preparation for academic theological research, thesis writing, and scholarly communication." },
-  { code: "MTH 506", title: "ADVANCED APOLOGETICS", description: "Rigorous defense of the Christian faith against modern philosophical, scientific, and cultural challenges." }
+  { code: "MTH 501", title: "BIBLICAL ARCHAEOLOGY", description: "Explores archaeological discoveries that illuminate the historical and cultural background of the Bible, strengthening confidence in Scripture and interpretation." },
+  { code: "MTH 502", title: "CHURCH PLANTING", description: "Focuses on strategies for establishing and growing vibrant churches, including evangelism, discipleship, and community engagement." },
+  { code: "MTH 503", title: "ADVANCED MINISTERIAL ETHICS", description: "Examines ethical principles guiding ministry leadership, including integrity, accountability, and moral decision-making." },
+  { code: "MTH 504", title: "UNDERSTANDING SPIRITUAL GIFTS", description: "Provides insight into identifying and effectively using spiritual gifts for personal growth and church development." },
+  { code: "MTH 505", title: "ADVANCED PASTORAL MANAGEMENT", description: "Covers leadership, administration, financial stewardship, and organizational management within church settings." },
+  { code: "MTH 506", title: "CONTEMPORARY THEOLOGY", description: "Engages modern theological issues and applies biblical truth to current societal and church challenges." },
+  { code: "MTH 507", title: "ADVANCED PASTORAL COUNSELLING", description: "Equips students with practical counseling skills for handling emotional, spiritual, and relational issues in ministry." },
+  { code: "MTH 508", title: "ADVANCED HERMENEUTICS", description: "Develops advanced skills in interpreting Scripture accurately using sound exegetical methods." }
 ];
 
 const doctorateCourses = [
-  { code: "DTH 701", title: "SEMINAR IN THEOLOGICAL METHOD", description: "Advanced doctoral seminar on the epistemology and methodology of doing theology." },
-  { code: "DTH 702", title: "GLOBAL CHRISTIANITY", description: "Research into the shift of global Christianity and its implications for modern theology and missions." },
-  { code: "DTH 703", title: "ADVANCED BIBLICAL THEOLOGY", description: "Comprehensive study of the unified theological message across the Old and New Testaments." },
-  { code: "DTH 704", title: "ETHICS & CONTEMPORARY ISSUES", description: "Complex ethical decision making from a robust biblical and theological framework." },
-  { code: "DTH 705", title: "DISSERTATION PROPOSAL", description: "Guided development of the original doctoral research dissertation proposal." },
-  { code: "DTH 706", title: "DISSERTATION RESEARCH & WRITING", description: "Execution and defense of an original, significant contribution to theological scholarship." }
+  { code: "DTH 701", title: "ADVANCED LEADERSHIP THEORY AND PRAXIS", description: "Examines advanced theories of leadership within theological and ministry contexts, integrating strategic leadership, organizational dynamics, and practical application in complex environments." },
+  { code: "DTH 702", title: "THEOLOGY OF THE KINGDOM OF GOD", description: "Explores the biblical and theological foundations of the Kingdom of God, with emphasis on its implications for ministry, mission, and Christian life." },
+  { code: "DTH 703", title: "THEOLOGICAL ANTHROPOLOGY: DOCTRINE OF HUMANITY", description: "Provides an in-depth study of human nature from a theological perspective, including creation, fall, redemption, and the imago Dei in historical and contemporary thought." },
+  { code: "DTH 704", title: "ADVANCED RESEARCH METHODOLOGIES IN THEOLOGY", description: "Develops doctoral-level research competencies, including methodological frameworks, critical analysis, academic writing, and theological inquiry." },
+  { code: "DTH 705", title: "GLOBAL RELIGIONS AND CHRISTIANITY IN CONTEXT", description: "Examines Christianity within the broader landscape of world religions, focusing on comparative theology, intercultural engagement, and global religious dynamics." },
+  { code: "DTH 706", title: "THEOLOGICAL METHOD AND CONTEMPORARY DISCOURSE", description: "Engages advanced theological methods in dialogue with contemporary ethical, cultural, and societal issues affecting religion and the Church." },
+  { code: "DTH 707", title: "DISSERTATION PROPOSAL DEVELOPMENT", description: "Guides the formulation of a doctoral research proposal, including problem identification, literature review, and methodological design." },
+  { code: "DTH 708", title: "DISSERTATION RESEARCH AND SCHOLARLY WRITING", description: "Involves independent research culminating in a doctoral dissertation that demonstrates originality, critical engagement, and contribution to theological scholarship." },
+  { code: "DTH 709", title: "ADVANCED BIBLICAL HERMENEUTICS AND EXEGESIS", description: "Develops advanced skills in interpreting biblical texts using critical and theological methods, emphasizing exegetical analysis and contextual application." },
+  { code: "DTH 710", title: "APOLOGETICS (DEFENSE OF THE CHRISTIAN FAITH)", description: "A rigorous study of the rational, historical, and biblical defense of the Christian faith. This course equips students to engage competing worldviews, address philosophical objections, and articulate coherent arguments for the truth of Christianity in contemporary contexts. Ref: 1 Peter 3:15" },
+  { code: "DTH 711", title: "ECCLESIOLOGY AND MISSIONAL THEOLOGY", description: "Explores the doctrine and mission of the Church, focusing on its role, structure, and engagement in diverse cultural and global contexts." }
 ];
 
 const programmes = [
@@ -93,7 +100,7 @@ const programmes = [
     title: "Master of Theology",
     duration: "2 Years",
     icon: <Award size={24} />,
-    description: "Advanced theological study for those seeking to specialize in a specific area of theology, biblical studies, or pastoral care. Includes a major research thesis.",
+    description: "The Master of Theology (M.Th) program is designed to equip pastors, ministers, and Christian leaders with advanced biblical knowledge, practical ministry skills, and spiritual depth. This program prepares graduates for effective leadership in church, mission fields, and theological education.",
     requirements: "Bachelor of Theology with a minimum of Second Class Lower.",
     courses: masterCourses
   },

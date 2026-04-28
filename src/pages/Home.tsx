@@ -145,10 +145,10 @@ export default function Home() {
             <motion.img 
               key={currentHeroBg}
               src={currentHeroBg} 
-              initial={{ opacity: 0, scale: 1.1 }}
+              initial={{ opacity: 0.6, scale: 1.05 }}
               animate={{ opacity: 0.6, scale: 1.05 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 1.5 }}
+              transition={{ duration: 0.5 }}
               className="w-full h-full object-cover"
               alt="Seminary Atmosphere"
               loading="eager"
@@ -215,10 +215,10 @@ export default function Home() {
                 transition={{ delay: 0.2, duration: 1 }}
                 className="relative mb-4 w-full"
               >
-                <h1 className="text-5xl md:text-6xl lg:text-[4rem] font-serif font-black text-white leading-[1.1] tracking-tight text-left text-balance">
+                <h1 className="text-5xl md:text-6xl lg:text-[4rem] font-display font-bold text-white leading-[1.2] tracking-wide text-left text-balance drop-shadow-xl">
                   {str1.substring(0, Math.min(visibleCount, str1.length))}
                   <br className="hidden md:block" />
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-600 to-yellow-400">
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-600 to-yellow-400 font-black">
                     {visibleCount > str1.length ? str2.substring(0, visibleCount - str1.length) : ""}
                   </span>
                   <motion.span 
@@ -617,34 +617,33 @@ export default function Home() {
 
       {/* Floating School Anthem Player */}
       {anthemUrl && (
-        <div className="fixed bottom-8 left-8 z-[100]">
+        <div className="fixed bottom-6 right-4 z-[100] opacity-60 hover:opacity-100 transition-all">
           <motion.div 
-            initial={{ x: -100, opacity: 0 }}
+            initial={{ x: 50, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
-            className="flex items-center gap-3 bg-white/90 backdrop-blur-md p-2 pl-4 rounded-full border border-slate-200 shadow-[0_8px_32px_rgba(0,0,0,0.12)] group hover:shadow-[0_12px_40px_rgba(0,0,0,0.2)] transition-all"
+            className="flex flex-col items-center gap-2 bg-white/70 backdrop-blur-md p-1.5 rounded-full border border-slate-200 shadow-sm hover:shadow-md transition-all"
           >
-            <div className="hidden md:block">
-              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-0.5">Now Entertaining</h4>
-              <p className="text-xs font-bold text-slate-800 whitespace-nowrap overflow-hidden max-w-[120px] truncate">{anthemTitle || 'School Anthem'}</p>
-            </div>
             <button 
               onClick={toggleAnthem}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isAnthemPlaying ? 'bg-yellow-600 text-white shadow-[0_0_15px_rgba(202,138,4,0.4)]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${isAnthemPlaying ? 'bg-[#b8860b] text-white shadow-[0_0_8px_rgba(184,134,11,0.4)]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
             >
-              {isAnthemPlaying ? <Pause size={20} className="fill-current" /> : <Play size={20} className="fill-current ml-1" />}
+              {isAnthemPlaying ? <Pause size={14} className="fill-current" /> : <Play size={14} className="fill-current ml-0.5" />}
               {isAnthemPlaying && (
-                <div className="absolute -top-1 -right-1 flex gap-0.5">
+                <div className="absolute -top-1 -right-1 flex gap-[1px]">
                   {[...Array(3)].map((_, i) => (
                     <motion.div 
                       key={i}
-                      animate={{ height: [4, 12, 4] }}
+                      animate={{ height: [3, 8, 3] }}
                       transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.1 }}
-                      className="w-1 bg-yellow-400 rounded-full"
+                      className="w-[2px] bg-[#b8860b] rounded-full"
                     />
                   ))}
                 </div>
               )}
             </button>
+            <div className="hidden md:flex py-1 items-center justify-center h-24" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+              <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap overflow-hidden text-ellipsis">{anthemTitle || 'Anthem'}</p>
+            </div>
             <audio 
               ref={audioRef}
               src={anthemUrl}

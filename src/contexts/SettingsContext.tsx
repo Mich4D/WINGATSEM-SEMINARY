@@ -12,6 +12,7 @@ interface Settings {
   schoolName: string;
   heroBgUrl?: string | null;
   rectorImageUrl?: string | null;
+  aboutImageUrl?: string | null;
   liveStreamUrl?: string | null;
   anthemUrl?: string | null;
   anthemTitle?: string | null;
@@ -26,6 +27,7 @@ const SettingsContext = createContext<Settings>({
   schoolName: 'Winning Gate Christian Theological Seminary',
   heroBgUrl: null,
   rectorImageUrl: null,
+  aboutImageUrl: null,
   liveStreamUrl: null,
   anthemUrl: null,
   anthemTitle: 'School Anthem',
@@ -52,6 +54,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
       schoolName: 'Winning Gate Christian Theological Seminary',
       heroBgUrl: null,
       rectorImageUrl: null,
+      aboutImageUrl: null,
       liveStreamUrl: null,
       anthemUrl: null,
       anthemTitle: 'School Anthem',
@@ -74,11 +77,24 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
         .select('value')
         .eq('id', 'anthem')
         .single();
+        
+      const { data: aboutRow } = await supabase
+        .from('settings')
+        .select('value')
+        .eq('id', 'about')
+        .single();
 
       let anthemData = null;
       if (anthemRow && anthemRow.value) {
         try {
           anthemData = typeof anthemRow.value === 'string' ? JSON.parse(anthemRow.value) : anthemRow.value;
+        } catch (e) {}
+      }
+      
+      let aboutData = null;
+      if (aboutRow && aboutRow.value) {
+        try {
+          aboutData = typeof aboutRow.value === 'string' ? JSON.parse(aboutRow.value) : aboutRow.value;
         } catch (e) {}
       }
         
@@ -88,6 +104,7 @@ export const SettingsProvider = ({ children }: { children: ReactNode }) => {
           schoolName: globalData.schoolName || globalData.school_name || 'Winning Gate Christian Theological Seminary',
           heroBgUrl: globalData.heroBgUrl || globalData.hero_bg_url || null,
           rectorImageUrl: globalData.rectorImageUrl || globalData.rector_image_url || globalData.rectorUrl || null,
+          aboutImageUrl: aboutData?.url || globalData.aboutImageUrl || globalData.about_image_url || null,
           liveStreamUrl: globalData.liveStreamUrl || globalData.live_stream_url || null,
           anthemUrl: anthemData?.url || globalData.anthemUrl || globalData.anthem_url || null,
           anthemTitle: anthemData?.title || globalData.anthemTitle || globalData.anthem_title || 'School Anthem',

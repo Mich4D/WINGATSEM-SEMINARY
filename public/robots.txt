@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://winninggateseminary.com.ng/sitemap.xml

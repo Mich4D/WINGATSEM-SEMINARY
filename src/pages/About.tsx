@@ -4,7 +4,7 @@ import { formatImageUrl } from '../utils/formatImage';
 import { Globe } from 'lucide-react';
 
 export default function About() {
-  const { rectorImageUrl } = useSettings();
+  const { rectorImageUrl, aboutImageUrl } = useSettings();
 
   return (
     <div className="bg-slate-50 min-h-screen py-16">
@@ -43,12 +43,21 @@ export default function About() {
           </div>
           <div className="relative">
             <div className="absolute inset-0 bg-yellow-600 rounded-2xl transform translate-x-4 translate-y-4 opacity-20"></div>
-            <img 
-              src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80" 
-              alt="Seminary Campus" 
-              className="rounded-2xl shadow-xl relative z-10 w-full h-auto object-cover"
-              referrerPolicy="no-referrer"
-            />
+            {aboutImageUrl ? (
+              <img 
+                src={formatImageUrl(aboutImageUrl)} 
+                alt="Seminary Campus" 
+                className="rounded-2xl shadow-xl relative z-10 w-full h-auto object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <img 
+                src="https://images.unsplash.com/photo-1541339907198-e08756dedf3f?ixlib=rb-4.0.3&auto=format&fit=crop&w=1000&q=80" 
+                alt="Seminary Campus" 
+                className="rounded-2xl shadow-xl relative z-10 w-full h-auto object-cover"
+                referrerPolicy="no-referrer"
+              />
+            )}
           </div>
         </div>
 

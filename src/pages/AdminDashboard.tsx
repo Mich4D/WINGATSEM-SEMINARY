@@ -682,7 +682,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'rectorImage' | 'heroBg' | 'anthem') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'rectorImage' | 'aboutImage' | 'heroBg' | 'anthem') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -729,6 +729,12 @@ export default function AdminDashboard() {
           value: JSON.stringify({ url: finalUrl, title: settings.anthemTitle || 'School Anthem' })
         });
         if (error) throw error;
+      } else if (type === 'aboutImage') {
+        const { error } = await supabase.from('settings').upsert({
+          id: 'about',
+          value: JSON.stringify({ url: finalUrl })
+        });
+        if (error) throw error;
       } else {
         const dbKey = type === 'logo' ? 'logo_url' : 
                       type === 'rectorImage' ? 'rector_image_url' : 
@@ -753,7 +759,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleUrlSave = async (e: React.MouseEvent<HTMLButtonElement>, type: 'logo' | 'rectorImage' | 'heroBg' | 'liveStream' | 'anthem', url: string) => {
+  const handleUrlSave = async (e: React.MouseEvent<HTMLButtonElement>, type: 'logo' | 'rectorImage' | 'aboutImage' | 'heroBg' | 'liveStream' | 'anthem', url: string) => {
     const btn = e.currentTarget;
     const originalText = btn.innerText;
     btn.innerText = 'Saving...';
@@ -765,6 +771,12 @@ export default function AdminDashboard() {
         const { error } = await supabase.from('settings').upsert({
           id: 'anthem',
           value: JSON.stringify({ url: formattedUrl, title: settings.anthemTitle || 'School Anthem' })
+        });
+        if (error) throw error;
+      } else if (type === 'aboutImage') {
+        const { error } = await supabase.from('settings').upsert({
+          id: 'about',
+          value: JSON.stringify({ url: formattedUrl })
         });
         if (error) throw error;
       } else {
@@ -2389,6 +2401,45 @@ export default function AdminDashboard() {
                           />
                           <button 
                             onClick={(e) => handleUrlSave(e, 'rectorImage', settings.rectorImageUrl)}
+                            className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors whitespace-nowrap"
+                          >
+                            Save URL
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-6 border border-slate-100 rounded-xl bg-slate-50">
+                    <h3 className="font-bold text-slate-900 mb-4">About Us Campus Image</h3>
+                    <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+                      <div className="w-24 h-24 shrink-0 bg-white border border-slate-200 rounded-lg flex items-center justify-center overflow-hidden">
+                        {settings.aboutImageUrl ? (
+                          <img 
+                            src={formatImageUrl(settings.aboutImageUrl)} 
+                            alt="Campus" 
+                            className="w-full h-full object-cover" 
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <span className="text-xs text-slate-400 text-center px-2">No Image<br/><span className="text-[10px]">Using Default</span></span>
+                        )}
+                      </div>
+                      <div className="flex-grow w-full space-y-3">
+                        <label className={`cursor-pointer inline-flex bg-white border border-slate-200 hover:border-yellow-600 text-slate-700 px-4 py-2 rounded-lg font-medium transition-colors items-center gap-2 ${uploadingType === 'aboutImage' ? 'opacity-50 cursor-wait' : ''}`}>
+                          <Upload size={16} /> {uploadingType === 'aboutImage' ? 'Uploading...' : 'Upload About Image'}
+                          <input type="file" className="hidden" accept="image/*" onChange={(e) => handleImageUpload(e, 'aboutImage')} disabled={uploadingType === 'aboutImage'} />
+                        </label>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input 
+                            type="text" 
+                            placeholder="Or paste an image URL here..." 
+                            className="flex-grow min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                            value={settings.aboutImageUrl || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, aboutImageUrl: e.target.value }))}
+                          />
+                          <button 
+                            onClick={(e) => handleUrlSave(e, 'aboutImage', settings.aboutImageUrl || '')}
                             className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors whitespace-nowrap"
                           >
                             Save URL

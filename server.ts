@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import Stripe from "stripe";
+
 import dotenv from "dotenv";
 import path from "path";
 import { WebSocketServer, WebSocket } from "ws";
@@ -61,18 +61,7 @@ function getTransporter() {
   return nodemailer.createTransport(config);
 }
 
-let stripeClient: Stripe | null = null;
 
-function getStripe(): Stripe {
-  if (!stripeClient) {
-    const key = process.env.STRIPE_SECRET_KEY;
-    if (!key) {
-      throw new Error("STRIPE_SECRET_KEY environment variable is required");
-    }
-    stripeClient = new Stripe(key, { apiVersion: "2025-02-24.acacia" as any });
-  }
-  return stripeClient;
-}
 
 // Helper to check if a URL is valid
 const isValidUrl = (url: string | undefined) => {
@@ -312,95 +301,7 @@ app.post("/api/send-payment-receipt", async (req, res) => {
   }
 });
 
-app.post("/api/create-checkout-session", async (req, res) => {
-  try {
-    const stripe = getStripe();
-    const { certificateId, userId, courseName } = req.body;
 
-    if (!certificateId || !userId) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-
-    // In a real app, you would validate the certificate and user in Firestore here
-    // For this prototype, we'll create the session directly
-    
-    // Use the referer or origin to construct the success/cancel URLs
-    const origin = req.headers.origin || req.headers.referer || `http://localhost:${PORT}`;
-    const baseUrl = origin.endsWith('/') ? origin.slice(0, -1) : origin;
-
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: `Certificate: ${courseName || 'Graduation'}`,
-              description: "Official Seminary Certificate Download",
-            },
-            unit_amount: 5000, // $50.00 in cents
-          },
-          quantity: 1,
-        },
-      ],
-      mode: "payment",
-      success_url: `${baseUrl}/dashboard?payment=success&certId=${certificateId}`,
-      cancel_url: `${baseUrl}/dashboard?payment=cancelled`,
-      metadata: {
-        certificateId,
-        userId,
-      },
-    });
-
-    res.json({ id: session.id, url: session.url });
-  } catch (error: any) {
-    console.error("Stripe error:", error);
-    res.status(500).json({ error: error.message || "Internal server error" });
-  }
-});
-
-app.post("/api/create-registration-checkout", async (req, res) => {
-  try {
-    const stripe = getStripe();
-    const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-
-    const origin = req.headers.origin || req.headers.referer || `http://localhost:${PORT}`;
-    const baseUrl = origin.endsWith('/') ? origin.slice(0, -1) : origin;
-
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: "Seminary Registration Fee",
-              description: "Non-refundable application and registration fee",
-            },
-            unit_amount: 2000, // $20.00 in cents
-          },
-          quantity: 1,
-        },
-      ],
-      mode: "payment",
-      success_url: `${baseUrl}/dashboard?payment=registration_success`,
-      cancel_url: `${baseUrl}/dashboard?payment=registration_cancelled`,
-      metadata: {
-        userId,
-        type: "registration_fee"
-      },
-    });
-
-    res.json({ id: session.id, url: session.url });
-  } catch (error: any) {
-    console.error("Stripe error:", error);
-    res.status(500).json({ error: error.message || "Internal server error" });
-  }
-});
 
 app.post("/mark-attendance", (req, res) => {
   const { regNumber, level, department } = req.body;
@@ -592,7 +493,8 @@ app.post("/api/set-admin-claim", async (req, res) => {
 // Vite middleware for development
 app.get("/api/check-smtp", (req, res) => {
   const user = process.env.SMTP_USER || "";
-  const pass = process.env.SMTP_PASS || "";
+  const rawPass = process.env.SMTP_PASS || "";
+  const pass = rawPass.replace(/\s/g, "");
   const defaultHost = user.toLowerCase().includes("gmail.com") ? "smtp.gmail.com" : "smtp-relay.brevo.com";
   const host = process.env.SMTP_HOST || (user ? defaultHost : "");
   

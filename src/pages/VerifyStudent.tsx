@@ -43,7 +43,7 @@ export default function VerifyStudent() {
       // Try exact registration number only (case-insensitive) for better privacy
       const { data: studentData, error: studentError } = await supabase
         .from('users')
-        .select('name, registration_number, department_code, program_type, level, date_registered, profile_image_url')
+        .select('id, name, registration_number, department_code, program_type, level, date_registered, profile_image_url')
         .ilike('registration_number', sanitizedVal)
         .maybeSingle();
 

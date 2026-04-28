@@ -120,7 +120,9 @@ export default function Login() {
     setError('');
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(emailToUse);
+      const { error } = await supabase.auth.resetPasswordForEmail(emailToUse, {
+        redirectTo: `${window.location.origin}/login`,
+      });
       if (error) throw error;
       setResetSent(true);
     } catch (err: any) {
@@ -214,7 +216,8 @@ export default function Login() {
           email: targetEmail, 
           password,
           options: {
-            data: { full_name: targetEmail.split('@')[0] }
+            data: { full_name: targetEmail.split('@')[0] },
+            emailRedirectTo: `${window.location.origin}/login`
           }
         });
         if (error) throw error;

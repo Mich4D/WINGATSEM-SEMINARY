@@ -234,7 +234,7 @@ export default function OnlineClass() {
         body: JSON.stringify({ 
           email: profile.email, 
           phone: profile.phoneNumber, 
-          studentName: profile.displayName || profile.name, 
+          studentName: profile.displayName, 
           regNumber: actualReg 
         })
       });

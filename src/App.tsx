@@ -43,18 +43,14 @@ const PrivateRoute = ({ children, roles }: { children: ReactNode, roles?: ('stud
   const { user, profile, loading } = useAuth();
   const location = useLocation();
 
-  if (loading) return <div className="flex justify-center items-center h-screen">Loading...</div>;
+  if (loading) return (
+    <div className="flex flex-col justify-center items-center h-screen bg-slate-50">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-600 mb-4"></div>
+      <p className="text-slate-600 font-medium">Loading...</p>
+    </div>
+  );
 
   if (!user && !profile) return <Navigate to="/" />;
-
-  // Enforce Student 2FA OTP Verification across all protected routes
-  if (profile?.role === 'student') {
-    const isVerified = sessionStorage.getItem(`wgts_2fa_verified_${profile.uid}`);
-    if (!isVerified) {
-      console.log('Student not 2FA verified, redirecting to login');
-      return <Navigate to="/login?verify=true" replace />;
-    }
-  }
 
   if (roles && profile && !roles.includes(profile.role)) {
     // If they are an admin trying to access student dashboard, send to admin
