@@ -294,6 +294,38 @@ DROP POLICY IF EXISTS "Admins can manage gallery_videos" ON gallery_videos;
 CREATE POLICY "Admins can manage gallery_videos" ON gallery_videos FOR ALL TO authenticated USING ( public.is_admin(auth.uid()) );
 ```
 
+## 5. Blog Posts Table
+
+Run this to create the table for the blog:
+
+```sql
+-- Blog Posts Table
+CREATE TABLE IF NOT EXISTS blog_posts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  excerpt TEXT,
+  cover_image_url TEXT,
+  status TEXT DEFAULT 'draft',
+  author_id uuid REFERENCES public.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE blog_posts ENABLE ROW LEVEL SECURITY;
+
+-- Policies for Blog Posts
+DROP POLICY IF EXISTS "Public can read published posts" ON blog_posts;
+CREATE POLICY "Public can read published posts" ON blog_posts FOR SELECT TO public USING (status = 'published');
+
+DROP POLICY IF EXISTS "Admins can manage blog posts" ON blog_posts;
+CREATE POLICY "Admins can manage blog posts" ON blog_posts FOR ALL TO authenticated USING ( public.is_admin(auth.uid()) );
+
+DROP POLICY IF EXISTS "Admins can view draft posts" ON blog_posts;
+CREATE POLICY "Admins can view draft posts" ON blog_posts FOR SELECT TO authenticated USING ( public.is_admin(auth.uid()) );
+```
+
 ### Manual Storage Policies (If not Public)
 If you prefer not to make the bucket public, add these policies to the `App_files` bucket:
 

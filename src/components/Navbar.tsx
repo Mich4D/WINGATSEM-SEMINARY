@@ -117,6 +117,7 @@ export default function Navbar() {
                   <NavLink to="/programmes">Programmes</NavLink>
                   <NavLink to="/admissions">Admissions</NavLink>
                   <NavLink to="/gallery">Gallery</NavLink>
+                  <NavLink to="/blog">Blog</NavLink>
                   <Link to="/live" className="flex items-center gap-1.5 text-slate-800 hover:text-slate-900 font-semibold transition-all">
                     <span className="relative flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
@@ -244,6 +245,7 @@ export default function Navbar() {
                   <MobileNavLink to="/programmes">Programmes</MobileNavLink>
                   <MobileNavLink to="/admissions">Admissions</MobileNavLink>
                   <MobileNavLink to="/gallery">Gallery</MobileNavLink>
+                  <MobileNavLink to="/blog">Blog</MobileNavLink>
                   <MobileNavLink to="/live" className="text-red-600 font-bold border-l-4 border-red-600 bg-red-50">Live Event</MobileNavLink>
                   <MobileNavLink to="/contact">Contact</MobileNavLink>
                 </>

@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { Users, Book, Settings, FileText, CheckCircle, XCircle, Upload, Download, Video, Image as ImageIcon, ArrowLeft, Award, Mail, X, GraduationCap, Copy, ShieldCheck, CreditCard, Search, DollarSign, ExternalLink, Globe } from 'lucide-react';
 
 import { formatImageUrl } from '../utils/formatImage';
+import AdminBlog from '../components/AdminBlog';
 
 export default function AdminDashboard() {
   const { profile } = useAuth();
@@ -1019,6 +1020,12 @@ export default function AdminDashboard() {
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'gallery' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 <ImageIcon size={20} /> Gallery & Media
+              </button>
+              <button 
+                onClick={() => setActiveTab('blog')}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'blog' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+              >
+                <FileText size={20} /> Blog Updates
               </button>
               <button 
                 onClick={() => setActiveTab('finance')}
@@ -2359,6 +2366,10 @@ export default function AdminDashboard() {
                   )}
                 </div>
               </div>
+            )}
+
+            {activeTab === 'blog' && (
+              <AdminBlog showToast={showToast} />
             )}
 
             {activeTab === 'settings' && (

@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Radio, Settings, X, Video, ExternalLink, KeyRound, Server } from 'lucide-react';
 import ReactPlayer from 'react-player';
-const Player = ReactPlayer as any;
+import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { supabase } from '../lib/supabase';
 
+const Player = ReactPlayer as any;
+
 export default function LiveEvent() {
+  const { profile } = useAuth();
   const { liveStreamUrl } = useSettings();
   const [showSettings, setShowSettings] = useState(false);
   const [prejoinEnabled, setPrejoinEnabled] = useState(false);
@@ -103,7 +106,7 @@ export default function LiveEvent() {
         ) : (
           <div className="absolute inset-0 w-full h-full bg-black">
             <iframe
-              src={`https://meet.jit.si/${broadcastRoom}#config.prejoinPageEnabled=${prejoinEnabled}&config.prejoinConfig.enabled=${prejoinEnabled}&config.startWithVideoMuted=true&config.startWithAudioMuted=true&config.disableDeepLinking=true&config.disableInviteFunctions=true&config.toolbarButtons=%5B%5D&config.disableToolbarAccess=true&interfaceConfig.HIDE_INVITE_MORE_HEADER=true&interfaceConfig.TOOLBAR_BUTTONS=%5B%5D&interfaceConfig.MOBILE_APP_PROMO=false`}
+              src={`https://meet.jit.si/${broadcastRoom}#config.prejoinPageEnabled=${prejoinEnabled}&config.prejoinConfig.enabled=${prejoinEnabled}&config.disableDeepLinking=true&interfaceConfig.MOBILE_APP_PROMO=false${profile?.role === 'admin' || profile?.role === 'teacher' ? '&config.startWithVideoMuted=false&config.startWithAudioMuted=true' : '&config.startWithVideoMuted=true&config.startWithAudioMuted=true&config.disableInviteFunctions=true&config.toolbarButtons=%5B%5D&config.disableToolbarAccess=true&interfaceConfig.HIDE_INVITE_MORE_HEADER=true&interfaceConfig.TOOLBAR_BUTTONS=%5B%5D'}`}
               className="w-full h-full border-0"
               allow="camera; microphone; fullscreen; display-capture; autoplay"
             />

@@ -1,5 +1,9 @@
 import React, {StrictMode, ErrorInfo, ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
+import { registerSW } from 'virtual:pwa-register';
+
+// Register service worker for PWA
+registerSW({ immediate: true });
 
 // Capture recovery state before Supabase or anything else can strip the hash
 const hasRecovery = window.location.hash.includes('type=recovery') || 

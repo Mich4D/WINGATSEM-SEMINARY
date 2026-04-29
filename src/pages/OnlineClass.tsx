@@ -33,9 +33,8 @@ export default function OnlineClass() {
   // Settings
   const [prejoinEnabled, setPrejoinEnabled] = useState(true);
 
-  // Constants for JaaS
-  const JAAS_APP_ID = "vpaas-magic-cookie-caa2a4ec4e874f4b9413e72d1e00a9ff";
-  const JITSI_DOMAIN = "8x8.vc";
+  // Constants for Jitsi
+  const JITSI_DOMAIN = "meet.jit.si";
 
   // Create a unique room name based on the class ID
   const getRoomName = (programType: string) => {
@@ -91,7 +90,7 @@ export default function OnlineClass() {
     // Only load Jitsi API if we are joining a video/audio class
     if ((classMode === 'video' || classMode === 'audio') && !window.JitsiMeetExternalAPI) {
       const script = document.createElement("script");
-      script.src = `https://${JITSI_DOMAIN}/${JAAS_APP_ID}/external_api.js`;
+      script.src = `https://${JITSI_DOMAIN}/external_api.js`;
       script.async = true;
       document.body.appendChild(script);
       
@@ -122,8 +121,7 @@ export default function OnlineClass() {
     const startAudioOnly = classMode === 'audio';
 
     const options = {
-      roomName: `${JAAS_APP_ID}/${roomName}`,
-      jwt: "eyJraWQiOiJ2cGFhcy1tYWdpYy1jb29raWUtY2FhMmE0ZWM0ZTg3NGY0Yjk0MTNlNzJkMWUwMGE5ZmYvNGQzYjY4LVNBTVBMRV9BUFAiLCJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJqaXRzaSIsImlzcyI6ImNoYXQiLCJpYXQiOjE3NzcxMzA4NTMsImV4cCI6MTc3NzEzODA1MywibmJmIjoxNzc3MTMwODQ4LCJzdWIiOiJ2cGFhcy1tYWdpYy1jb29raWUtY2FhMmE0ZWM0ZTg3NGY0Yjk0MTNlNzJkMWUwMGE5ZmYiLCJjb250ZXh0Ijp7ImZlYXR1cmVzIjp7ImxpdmVzdHJlYW1pbmciOnRydWUsImZpbGUtdXBsb2FkIjp0cnVlLCJvdXRib3VuZC1jYWxsIjp0cnVlLCJzaXAtb3V0Ym91bmQtY2FsbCI6ZmFsc2UsInRyYW5zY3JpcHRpb24iOnRydWUsImxpc3QtdmlzaXRvcnMiOmZhbHNlLCJyZWNvcmRpbmciOnRydWUsImZsaXAiOmZhbHNlfSwidXNlciI6eyJoaWRkZW4tZnJvbS1yZWNvcmRlciI6ZmFsc2UsIm1vZGVyYXRvciI6dHJ1ZSwibmFtZSI6IndpbmdhdHNlbSIsImlkIjoiZ29vZ2xlLW9hdXRoMnwxMDk5MjYyNTQ4MjE3MjUyMzQ3NjEiLCJhdmF0YXIiOiIiLCJlbWFpbCI6IndpbmdhdHNlbUBnbWFpbC5jb20ifX0sInJvb20iOiIqIn0.XLUUjKvdJ7OPjOH9sJOqO8VjoktFIJh7pejd4UtJPtkgEQMPiJTyVTE2jfqoaZZn6F32vYaFH9QHg5NuoVn96mpvzsOBaYva2DG7R3KPTW_PSiVySGdTQvPt8n-N0_jSJYXzNdbMIlqu7okCWltXInMeL5E4Qjrzj2d4pF9c2ha-B0wNxgPC0Kmwgcuj15XXkmNGJ28OM895rm4rvTqHDJWizwMrRpfgeZM1OtvgQJHA8VTBbaCjxwszAJbx9E8BSz1vKZikKzobUhIplkY9ge_dQAyb4YKLyP_X3za_LmGhAmsuq-SDgytBTKcobPzD72xLkm_h0RtxpaAapjwJkA",
+      roomName: roomName,
       parentNode: jitsiContainerRef.current,
       configOverwrite: {
         startWithAudioMuted: false,

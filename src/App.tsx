@@ -41,6 +41,8 @@ import StaffPortal from './pages/StaffPortal';
 import BootstrapAdmin from './pages/BootstrapAdmin';
 import OnlineClass from './pages/OnlineClass';
 import LiveEvent from './pages/LiveEvent';
+import Blog from './pages/Blog';
+import BlogPost from './pages/BlogPost';
 import VerifyStudent from './pages/VerifyStudent';
 import Footer from './components/Footer';
 import { SettingsProvider } from './contexts/SettingsContext';
@@ -104,6 +106,8 @@ export default function App() {
                     <Route path="/contact" element={<Contact />} />
                     <Route path="/gallery" element={<Gallery />} />
                     <Route path="/live" element={<LiveEvent />} />
+                    <Route path="/blog" element={<Blog />} />
+                    <Route path="/blog/:id" element={<BlogPost />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/bootstrap" element={<BootstrapAdmin />} />
                     <Route path="/verify" element={<VerifyStudent />} />
