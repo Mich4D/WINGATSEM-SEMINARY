@@ -466,10 +466,14 @@ export default function StudentDashboard() {
 
       console.log("Updating Supabase document with upsert...");
       // Save data using upsert to handle cases where the row might not exist yet
-      const { error } = await withTimeout(supabase.from('users').upsert({
-        id: user.id,
-        ...updateData
-      }), 15000, "Database Update");
+      const { error } = await withTimeout(
+        Promise.resolve(supabase.from('users').upsert({
+          id: user.id,
+          ...updateData
+        }).then(res => res as { error: any })), 
+        15000, 
+        "Database Update"
+      );
       if (error) throw error;
       console.log("Supabase upsert successful.");
 
