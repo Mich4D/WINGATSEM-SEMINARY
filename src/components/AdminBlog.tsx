@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Plus, Edit2, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, CheckCircle, XCircle, Facebook, ExternalLink, Share2, ArrowLeft } from 'lucide-react';
 import { formatImageUrl } from '../utils/formatImage';
 
 export default function AdminBlog({ showToast }: { showToast: (msg: string, type: 'success' | 'error') => void }) {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
+  const [showShareSuccess, setShowShareSuccess] = useState<string | null>(null);
   const [currentPost, setCurrentPost] = useState<any>({
     title: '', content: '', excerpt: '', cover_image_url: '', status: 'draft'
   });
@@ -70,6 +71,11 @@ export default function AdminBlog({ showToast }: { showToast: (msg: string, type
             throw error;
         }
         showToast('Post created successfully', 'success');
+        if (currentPost.status === 'published') {
+          // If we had a return ID, we could use it, but for now we look up the latest
+          const { data: latestPost } = await supabase.from('blog_posts').select('id').order('created_at', { ascending: false }).limit(1).single();
+          if (latestPost) setShowShareSuccess(latestPost.id);
+        }
       }
       setIsEditing(false);
       setCurrentPost({ title: '', content: '', excerpt: '', cover_image_url: '', status: 'draft' });
@@ -92,6 +98,58 @@ export default function AdminBlog({ showToast }: { showToast: (msg: string, type
       showToast('Failed to delete post', 'error');
     }
   };
+
+  if (showShareSuccess) {
+    const postUrl = `${window.location.origin}/blog/${showShareSuccess}`;
+    return (
+      <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-8 text-center max-w-lg mx-auto my-12 animate-in zoom-in-95 duration-300">
+        <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
+          <CheckCircle size={40} />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Published Successfully!</h2>
+        <p className="text-slate-600 mb-8">Your post is now live. Share it with your community on Facebook to spread the word.</p>
+        
+        <div className="flex flex-col gap-4">
+          <button 
+            onClick={() => {
+              const url = encodeURIComponent(postUrl);
+              window.open(`https://www.facebook.com/sharer/sharer.php?u=${url}`, '_blank');
+            }}
+            className="w-full flex items-center justify-center gap-3 py-4 bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold rounded-xl transition-all shadow-md group"
+          >
+            <Facebook size={24} /> <span>Share to Facebook Page</span>
+          </button>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <button 
+              onClick={() => {
+                const text = encodeURIComponent(`Check out our new post: ${postUrl}`);
+                window.open(`https://wa.me/?text=${text}`, '_blank');
+              }}
+              className="flex items-center justify-center gap-2 py-3 bg-[#25D366] hover:bg-[#20bd5c] text-white font-bold rounded-xl transition-all shadow-sm"
+            >
+              <Share2 size={18} /> WhatsApp
+            </button>
+            <a 
+              href={postUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all shadow-sm border border-slate-200"
+            >
+              <ExternalLink size={18} /> View Post
+            </a>
+          </div>
+          
+          <button 
+            onClick={() => setShowShareSuccess(null)}
+            className="mt-4 flex items-center justify-center gap-2 text-slate-400 hover:text-slate-600 font-bold text-sm transition-colors py-2"
+          >
+            <ArrowLeft size={16} /> Back to Blog List
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isEditing) {
     return (

@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { BookOpen, LogOut, Menu, X, Search, ChevronDown, User, Settings, LayoutDashboard } from 'lucide-react';
+import { BookOpen, LogOut, Menu, X, Search, ChevronDown, User, Settings, LayoutDashboard, Download, Smartphone } from 'lucide-react';
+import { usePWA } from '../hooks/usePWA';
 import { formatImageUrl } from '../utils/formatImage';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -12,6 +13,7 @@ export default function Navbar() {
   const { logoUrl } = useSettings();
   const navigate = useNavigate();
   const location = useLocation();
+  const { isInstallable, install, isStandalone } = usePWA();
   const [isOpen, setIsOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -168,6 +170,18 @@ export default function Navbar() {
                           <LayoutDashboard size={16} className="text-yellow-600" />
                           Dashboard
                         </Link>
+                        {isInstallable && (
+                          <button 
+                            onClick={() => {
+                              install();
+                              setShowUserMenu(false);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors uppercase tracking-wider"
+                          >
+                            <Download size={16} className="text-yellow-600" />
+                            Install App
+                          </button>
+                        )}
                         <button 
                           onClick={handleSignOut}
                           className="w-full flex items-center gap-3 px-4 py-2.5 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors mt-1 uppercase tracking-wider"
@@ -249,6 +263,28 @@ export default function Navbar() {
                   <MobileNavLink to="/live" className="text-red-600 font-bold border-l-4 border-red-600 bg-red-50">Live Event</MobileNavLink>
                   <MobileNavLink to="/contact">Contact</MobileNavLink>
                 </>
+              )}
+              
+              {isInstallable && !isStandalone && (
+                <button 
+                  onClick={install}
+                  className="w-full flex items-center gap-4 px-4 py-3 text-base font-bold text-yellow-600 bg-yellow-50 rounded-xl transition-all active:translate-x-1"
+                >
+                  <Download size={20} />
+                  Install App
+                </button>
+              )}
+              
+              {/iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream && !isStandalone && (
+                <div className="mx-4 p-4 rounded-xl bg-slate-50 border border-slate-200 mt-2">
+                  <p className="text-xs font-bold text-slate-900 mb-2 flex items-center gap-2">
+                    <Smartphone size={14} className="text-yellow-600" />
+                    How to Install on iPhone
+                  </p>
+                  <p className="text-[10px] text-slate-600 leading-relaxed">
+                    Tap the <span className="font-bold">Share</span> button and select <span className="font-bold">"Add to Home Screen"</span>.
+                  </p>
+                </div>
               )}
               
               <div className="mt-2 pt-4 border-t border-slate-100 space-y-3 px-3">

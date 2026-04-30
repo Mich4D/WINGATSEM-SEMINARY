@@ -45,6 +45,8 @@ import Blog from './pages/Blog';
 import BlogPost from './pages/BlogPost';
 import VerifyStudent from './pages/VerifyStudent';
 import Footer from './components/Footer';
+import AIChat from './components/AIChat';
+import InstallPWA from './components/InstallPWA';
 import { SettingsProvider } from './contexts/SettingsContext';
 
 const PrivateRoute = ({ children, roles }: { children: ReactNode, roles?: ('student' | 'admin' | 'teacher')[] }) => {
@@ -138,6 +140,8 @@ export default function App() {
                   </Routes>
                 </main>
                 <Footer />
+                <AIChat />
+                <InstallPWA />
               </div>
             } />
           </Routes>

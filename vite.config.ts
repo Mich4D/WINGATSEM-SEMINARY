@@ -21,7 +21,7 @@ export default defineConfig(({mode}) => {
           name: 'Winning Gate Christian Theological Seminary',
           short_name: 'WINGATSEM',
           description: 'Winning Gate Christian Theological Seminary - Theological Training Fully Loaded in English & Yoruba for Effective Service.',
-          theme_color: '#0f172a',
+          theme_color: '#b8860b',
           background_color: '#ffffff',
           display: 'standalone',
           icons: [

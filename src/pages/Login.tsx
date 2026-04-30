@@ -48,12 +48,6 @@ export default function Login() {
   const { profile, isPasswordRecovery, setIsPasswordRecovery } = useAuth();
   const { logoUrl } = useSettings();
 
-  const [debugInfo, setDebugInfo] = useState<{ url: string; hasKey: boolean; status: string }>({
-    url: '',
-    hasKey: false,
-    status: 'Checking...'
-  });
-
   useEffect(() => {
     if (isPasswordRecovery) {
       setIsResettingPassword(true);
@@ -66,26 +60,6 @@ export default function Login() {
       setIsResettingPassword(true);
       setIsForgotPassword(false);
     }
-
-    const checkConnection = async () => {
-      const url = import.meta.env.VITE_SUPABASE_URL || 'Not Set';
-      const hasKey = !!import.meta.env.VITE_SUPABASE_ANON_KEY;
-      
-      setDebugInfo(prev => ({ ...prev, url, hasKey }));
-
-      try {
-        const { error } = await supabase.from('settings').select('count', { count: 'exact', head: true });
-        if (error) {
-          setDebugInfo(prev => ({ ...prev, status: `Error: ${error.message}` }));
-        } else {
-          setDebugInfo(prev => ({ ...prev, status: 'Connected' }));
-        }
-      } catch (err: any) {
-        setDebugInfo(prev => ({ ...prev, status: `Fetch Error: ${err.message || 'Unknown error'}` }));
-      }
-    };
-
-    checkConnection();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
@@ -307,11 +281,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex bg-slate-50">
-      <div className="fixed top-0 left-0 right-0 z-[100] bg-slate-800 text-white text-[10px] px-2 py-1 flex gap-4 overflow-hidden whitespace-nowrap opacity-50 hover:opacity-100 transition-opacity">
-        <span>URL: {debugInfo.url}</span>
-        <span>Key: {debugInfo.hasKey ? '✅' : '❌'}</span>
-        <span>Status: <span className={debugInfo.status === 'Connected' ? 'text-green-400' : 'text-red-400'}>{debugInfo.status}</span></span>
-      </div>
       
       <div className="hidden lg:flex lg:w-1/2 bg-[#b8860b] items-center justify-center p-12 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
@@ -487,8 +456,8 @@ export default function Login() {
                   </div>
                 </div>
 
-                <button type="submit" disabled={loading || debugInfo.status !== 'Connected'} className="w-full flex justify-center items-center gap-2 py-4 px-4 border border-transparent rounded-xl shadow-md text-base font-medium text-white bg-[#b8860b] hover:bg-[#9a7009] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#b8860b] transition-all disabled:opacity-70">
-                  {loading ? 'Authenticating...' : (debugInfo.status !== 'Connected' ? 'Reconnecting to Server...' : (isLogin ? 'Sign In' : 'Register'))}
+                <button type="submit" disabled={loading} className="w-full flex justify-center items-center gap-2 py-4 px-4 border border-transparent rounded-xl shadow-md text-base font-medium text-white bg-[#b8860b] hover:bg-[#9a7009] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#b8860b] transition-all disabled:opacity-70">
+                  {loading ? 'Authenticating...' : (isLogin ? 'Sign In' : 'Register')}
                 </button>
               </form>
             )}
