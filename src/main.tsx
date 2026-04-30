@@ -1,6 +1,8 @@
 import React, {StrictMode, ErrorInfo, ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
+import App from './App.tsx';
+import './index.css';
 
 // Register service worker for PWA
 registerSW({ immediate: true });
@@ -12,9 +14,6 @@ const hasRecovery = window.location.hash.includes('type=recovery') ||
 if (hasRecovery) {
   (window as any).__IS_PASSWORD_RECOVERY = true;
 }
-
-import App from './App.tsx';
-import './index.css';
 
 interface Props {
   children: ReactNode;

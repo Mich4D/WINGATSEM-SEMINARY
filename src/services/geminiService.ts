@@ -1,13 +1,30 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+let ai: GoogleGenAI | null = null;
+
+function getAIClient() {
+  if (!ai) {
+    const key = process.env.GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+    if (!key) {
+      console.warn("GEMINI_API_KEY environment variable is missing.");
+    }
+    ai = new GoogleGenAI({ apiKey: key || 'dummy-key-to-prevent-crash' });
+  }
+  return ai;
+}
 
 export async function generateAIChatResponse(userMessage: string, history: { role: string; content: string }[]) {
   try {
+    const client = getAIClient();
+    if (!process.env.GEMINI_API_KEY && !import.meta.env.VITE_GEMINI_API_KEY) {
+      return "The AI feature is not fully configured (missing API key). Please contact the administrator.";
+    }
+
     const contents = history.map(h => ({
       role: h.role === 'user' ? 'user' : 'model',
       parts: [{ text: h.content }]
     }));
+
     
     // Add the current message
     contents.push({
@@ -15,7 +32,7 @@ export async function generateAIChatResponse(userMessage: string, history: { rol
       parts: [{ text: userMessage }]
     });
 
-    const response = await ai.models.generateContent({
+    const response = await client.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: contents,
       config: {

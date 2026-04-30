@@ -1,29 +1,5 @@
 import { ReactNode, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
-
-// Global gate to catch password recovery links
-const RecoveryGate = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  useEffect(() => {
-    // If we land anywhere with a recovery hash or search param, force redirect to /login
-    const hasRecovery = (window as any).__IS_PASSWORD_RECOVERY || 
-                       window.location.hash.includes('type=recovery') || 
-                       window.location.hash.includes('access_token=') || 
-                       location.search.includes('type=recovery') || 
-                       location.search.includes('error_code=');
-    
-    if (hasRecovery) {
-      if (location.pathname !== '/login') {
-        console.log('Recovery param detected, redirecting to login page');
-        navigate('/login' + location.search + window.location.hash);
-      }
-    }
-  }, [location, navigate]);
-
-  return null;
-};
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
@@ -48,6 +24,30 @@ import Footer from './components/Footer';
 import AIChat from './components/AIChat';
 import InstallPWA from './components/InstallPWA';
 import { SettingsProvider } from './contexts/SettingsContext';
+
+// Global gate to catch password recovery links
+const RecoveryGate = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    // If we land anywhere with a recovery hash or search param, force redirect to /login
+    const hasRecovery = (window as any).__IS_PASSWORD_RECOVERY || 
+                       window.location.hash.includes('type=recovery') || 
+                       window.location.hash.includes('access_token=') || 
+                       location.search.includes('type=recovery') || 
+                       location.search.includes('error_code=');
+    
+    if (hasRecovery) {
+      if (location.pathname !== '/login') {
+        console.log('Recovery param detected, redirecting to login page');
+        navigate('/login' + location.search + window.location.hash);
+      }
+    }
+  }, [location, navigate]);
+
+  return null;
+};
 
 const PrivateRoute = ({ children, roles }: { children: ReactNode, roles?: ('student' | 'admin' | 'teacher')[] }) => {
   const { user, profile, loading } = useAuth();
