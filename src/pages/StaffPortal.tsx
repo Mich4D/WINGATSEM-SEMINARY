@@ -20,16 +20,16 @@ export default function StaffPortal() {
       borderColor: 'border-yellow-200',
       hoverBorder: 'hover:border-yellow-500'
     },
-    {
-      id: 'admin',
-      title: 'Admin Portal',
-      description: 'System administrators can manage settings, approve admissions, and oversee total seminary operations.',
-      icon: <UserCog size={48} className="text-slate-800" />,
-      link: '/login?role=admin', // Administrative login currently uses the main authentication system
-      color: 'bg-slate-50',
-      borderColor: 'border-slate-200',
-      hoverBorder: 'hover:border-slate-800'
-    }
+    // {
+    //   id: 'admin',
+    //   title: 'Admin Portal',
+    //   description: 'System administrators can manage settings, approve admissions, and oversee total seminary operations.',
+    //   icon: <UserCog size={48} className="text-slate-800" />,
+    //   link: '/login?role=admin', // Administrative login currently uses the main authentication system
+    //   color: 'bg-slate-50',
+    //   borderColor: 'border-slate-200',
+    //   hoverBorder: 'hover:border-slate-800'
+    // }
   ];
 
   return (
@@ -76,7 +76,7 @@ export default function StaffPortal() {
           </motion.p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 max-w-5xl mx-auto">
+        <div className="grid grid-cols-1 gap-8 lg:gap-12 max-w-lg mx-auto">
           {staffTypes.map((type, idx) => (
             <motion.div
               key={type.id}

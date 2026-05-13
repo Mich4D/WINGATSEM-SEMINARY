@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { supabase } from '../lib/supabase';
 import { Book, Award, CreditCard, Download, User, CheckCircle, AlertCircle, Video, Lock, FileText, ChevronRight, ChevronLeft } from 'lucide-react';
 import { Country, State, City } from 'country-state-city';
-
+import { compressImage } from '../utils/imageUpload';
 import PaymentButton from '../components/PaymentButton';
 
 export default function StudentDashboard() {
   const { user, profile } = useAuth();
+  const { flutterwavePublicKey: globalFlutterwaveKey, loading: settingsLoading } = useSettings();
   const [courses, setCourses] = useState<any[]>([]);
   const [certificates, setCertificates] = useState<any[]>([]);
   const [grades, setGrades] = useState<any[]>([]);
@@ -371,15 +373,25 @@ export default function StudentDashboard() {
         }
         console.log(`Uploading ${label} (${file.size} bytes) to ${path}...`);
         try {
-          const { data, error } = await supabase.storage.from('App_files').upload(path, file, { upsert: true });
-          if (error) throw error;
-          
-          const { data: { publicUrl } } = supabase.storage.from('App_files').getPublicUrl(path);
-          console.log(`Successfully uploaded ${label}`);
-          return publicUrl;
+          const processedFile = await compressImage(file);
+          const formData = new FormData();
+          formData.append("file", processedFile);
+          formData.append("folder", "studenthub/academic");
+          const res = await fetch("/api/upload", { method: "POST", body: formData });
+          const data = await res.json();
+          if (data.url) {
+            console.log(`Successfully uploaded ${label}`);
+            return data.url;
+          } else {
+            throw new Error(data.error || "Upload failed");
+          }
         } catch (err: any) {
           console.warn(`Failed to upload ${label}:`, err.message);
-          throw err;
+          return new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
         }
       };
 
@@ -397,28 +409,28 @@ export default function StudentDashboard() {
       const uploadPromises: Promise<void>[] = [];
 
       if (profileImageFile) {
-        uploadPromises.push(withTimeout(validateAndUpload(profileImageFile, `${user.id}/profile_${Date.now()}`, "Profile Picture").then(url => { profileImageUrl = url; }), 60000, "Profile Picture Upload"));
+        uploadPromises.push(withTimeout(validateAndUpload(profileImageFile, `${user.id}/profile_${Date.now()}`, "Profile Picture").then(url => { profileImageUrl = url; }), 6000, "Profile Picture Upload"));
       }
       if (refLetter1File) {
-        uploadPromises.push(withTimeout(validateAndUpload(refLetter1File, `${user.id}/ref1_${Date.now()}.pdf`, "Reference Letter 1").then(url => { referenceLetter1Url = url; }), 60000, "Reference Letter 1 Upload"));
+        uploadPromises.push(withTimeout(validateAndUpload(refLetter1File, `${user.id}/ref1_${Date.now()}.pdf`, "Reference Letter 1").then(url => { referenceLetter1Url = url; }), 6000, "Reference Letter 1 Upload"));
       }
       if (refLetter2File) {
-        uploadPromises.push(withTimeout(validateAndUpload(refLetter2File, `${user.id}/ref2_${Date.now()}.pdf`, "Reference Letter 2").then(url => { referenceLetter2Url = url; }), 60000, "Reference Letter 2 Upload"));
+        uploadPromises.push(withTimeout(validateAndUpload(refLetter2File, `${user.id}/ref2_${Date.now()}.pdf`, "Reference Letter 2").then(url => { referenceLetter2Url = url; }), 6000, "Reference Letter 2 Upload"));
       }
       if (baptismCertFile) {
-        uploadPromises.push(withTimeout(validateAndUpload(baptismCertFile, `${user.id}/baptism_${Date.now()}`, "Baptism Certificate").then(url => { baptismCertificateUrl = url; }), 60000, "Baptism Certificate Upload"));
+        uploadPromises.push(withTimeout(validateAndUpload(baptismCertFile, `${user.id}/baptism_${Date.now()}`, "Baptism Certificate").then(url => { baptismCertificateUrl = url; }), 6000, "Baptism Certificate Upload"));
       }
       if (academicCredentialFile) {
-        uploadPromises.push(withTimeout(validateAndUpload(academicCredentialFile, `${user.id}/academic_${Date.now()}`, "Academic Credential").then(url => { academicCredentialUrl = url; }), 60000, "Academic Credential Upload"));
+        uploadPromises.push(withTimeout(validateAndUpload(academicCredentialFile, `${user.id}/academic_${Date.now()}`, "Academic Credential").then(url => { academicCredentialUrl = url; }), 6000, "Academic Credential Upload"));
       }
       if (diplomaFile) {
-        uploadPromises.push(withTimeout(validateAndUpload(diplomaFile, `${user.id}/diploma_${Date.now()}`, "Diploma").then(url => { diplomaUrl = url; }), 60000, "Diploma Upload"));
+        uploadPromises.push(withTimeout(validateAndUpload(diplomaFile, `${user.id}/diploma_${Date.now()}`, "Diploma").then(url => { diplomaUrl = url; }), 6000, "Diploma Upload"));
       }
       if (bachelorFile) {
-        uploadPromises.push(withTimeout(validateAndUpload(bachelorFile, `${user.id}/bachelor_${Date.now()}`, "Bachelor Degree").then(url => { bachelorUrl = url; }), 60000, "Bachelor Degree Upload"));
+        uploadPromises.push(withTimeout(validateAndUpload(bachelorFile, `${user.id}/bachelor_${Date.now()}`, "Bachelor Degree").then(url => { bachelorUrl = url; }), 6000, "Bachelor Degree Upload"));
       }
       if (masterFile) {
-        uploadPromises.push(withTimeout(validateAndUpload(masterFile, `${user.id}/master_${Date.now()}`, "Master Degree").then(url => { masterUrl = url; }), 60000, "Master Degree Upload"));
+        uploadPromises.push(withTimeout(validateAndUpload(masterFile, `${user.id}/master_${Date.now()}`, "Master Degree").then(url => { masterUrl = url; }), 6000, "Master Degree Upload"));
       }
 
       await Promise.all(uploadPromises);
@@ -478,11 +490,11 @@ export default function StudentDashboard() {
       console.log("Supabase upsert successful.");
 
       return true; // Return true to allow step advancement
-    } catch (error: any) {
+      } catch (error: any) {
       console.error("Error saving profile:", error);
       let errorMessage = error.message || 'Please try again.';
       if (errorMessage.includes('bucket not found') || errorMessage.includes('Bucket not found')) {
-        errorMessage = 'Storage bucket "App_files" not found. Please contact the administrator to create the bucket in Supabase Storage.';
+        errorMessage = 'Storage bucket "student" not found. Please contact the administrator to create the bucket in Supabase Storage.';
       } else if (errorMessage.includes('column') && errorMessage.includes('does not exist')) {
         errorMessage = `Database schema mismatch: ${errorMessage}. Please contact the administrator to update the "users" table columns.`;
       }
@@ -1098,7 +1110,7 @@ export default function StudentDashboard() {
                               text={savingProfile ? 'Processing...' : 'Pay Registration Fee & Submit'}
                               className="bg-yellow-600 text-white px-8 py-3 rounded-md font-bold hover:bg-yellow-700 transition-colors disabled:opacity-50 inline-flex items-center gap-2 text-lg shadow-md w-full justify-center"
                               disabled={savingProfile}
-                              flutterwavePublicKey={settings?.flutterwave_public_key || settings?.flutterwavePublicKey}
+                              flutterwavePublicKey={globalFlutterwaveKey || settings?.flutterwave_public_key || settings?.flutterwavePublicKey}
                               onBeforePayment={async () => {
                                 return await handleSaveProfile();
                               }}
@@ -1346,7 +1358,7 @@ export default function StudentDashboard() {
                     customerName={profile?.displayName || "Student Name"}
                     text={`Pay ${settings?.fees?.currency === 'USD' ? '$' : '₦'}${(settings?.fees?.tuition?.[profile.level.toLowerCase()] || 100000).toLocaleString()}`}
                     className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-md font-bold transition-colors whitespace-nowrap ml-4"
-                    flutterwavePublicKey={settings?.flutterwave_public_key || settings?.flutterwavePublicKey}
+                    flutterwavePublicKey={globalFlutterwaveKey || settings?.flutterwave_public_key || settings?.flutterwavePublicKey}
                     onSuccess={async (response) => {
                       try {
                         await supabase.from('users').update({
@@ -1449,7 +1461,7 @@ export default function StudentDashboard() {
                                 customerName={profile?.displayName || "Student Name"}
                                 text={`Pay ${settings?.fees?.currency === 'USD' ? '$' : '₦'}${(cert.price || 5000).toLocaleString()}`}
                                 className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors w-full"
-                                flutterwavePublicKey={settings?.flutterwave_public_key || settings?.flutterwavePublicKey}
+                                flutterwavePublicKey={globalFlutterwaveKey || settings?.flutterwave_public_key || settings?.flutterwavePublicKey}
                                 currency={settings?.fees?.currency || 'NGN'}
                                 onSuccess={async (response) => {
                                   try {

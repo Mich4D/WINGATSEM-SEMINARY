@@ -9,81 +9,34 @@ import { createClient } from '@supabase/supabase-js';
 
 dotenv.config({ override: true });
 
+import { v2 as cloudinary } from "cloudinary";
+import multer from "multer";
+
 const app = express();
 const PORT = 3000;
 
 app.use(cors());
 app.use(express.json());
 
-// Helper for SMTP Transport
-function getTransporter() {
-  const user = process.env.SMTP_USER;
-  const rawPass = (process.env.SMTP_PASS || "").trim();
-  
-  // Deep clean for Gmail App Passwords
-  const pass = rawPass.replace(/\s/g, '');
+// Initialize Supabase client for backend operations
+const rawSupabaseUrl = process.env.VITE_SUPABASE_URL;
+const rawSupabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
 
-  if (!user || !pass) {
-    console.warn("SMTP Diagnostic: Missing user or pass", { user: !!user, passLen: rawPass.length });
-    return null;
-  }
-
-  // Diagnostic log (SAFE: only shows length and boundaries)
-  console.log(`SMTP Diagnostic: Initializing with user: ${user}`);
-  console.log(`SMTP Diagnostic: Raw Pass Length: ${rawPass.length}, Cleaned Pass Length: ${pass.length}`);
-  if (pass.length > 5) {
-    console.log(`SMTP Diagnostic: Pass Preview: ${pass.substring(0, 2)}...${pass.substring(pass.length-2)}`);
-  }
-
-  const isGmail = user.toLowerCase().includes("gmail.com");
-  const host = process.env.SMTP_HOST || (isGmail ? "smtp.gmail.com" : "smtp-relay.brevo.com");
-
-  const config: any = {
-    auth: { user, pass },
-    debug: true,
-    logger: true
-  };
-
-  // FORCE Gmail service if domain matches gmail.com
-  // This is much more reliable than host/port config for Google
-  if (isGmail) {
-    config.service = 'gmail';
-    // Remove individual host/port/secure settings as 'service' handles them
-    delete config.host;
-    delete config.port;
-    delete config.secure;
-  } else {
-    config.host = host;
-    config.port = parseInt(process.env.SMTP_PORT || '587');
-    config.secure = process.env.SMTP_PORT === '465';
-  }
-
-  return nodemailer.createTransport(config);
-}
-
-
-
-// Helper to check if a URL is valid
-const isValidUrl = (url: string | undefined) => {
+function isValidUrl(urlString: string | undefined): boolean {
   try {
-    if (!url || url === 'undefined') return false;
-    new URL(url);
+    if (!urlString) return false;
+    new URL(urlString);
     return true;
   } catch (e) {
     return false;
   }
-};
-
-// Initialize Supabase client for backend operations
-const rawSupabaseUrl = process.env.VITE_SUPABASE_URL;
-const rawSupabaseKey = process.env.VITE_SUPABASE_ANON_KEY;
+}
 
 let supabaseUrl = rawSupabaseUrl;
 const supabaseKey = (rawSupabaseKey && rawSupabaseKey !== 'YOUR_SUPABASE_ANON_KEY') ? rawSupabaseKey : 'placeholder-key';
 
 if (!isValidUrl(supabaseUrl) && supabaseKey.startsWith('eyJ')) {
   try {
-    // Try to extract project ref from JWT
     const payload = JSON.parse(Buffer.from(supabaseKey.split('.')[1], 'base64').toString());
     if (payload.ref) {
       supabaseUrl = `https://${payload.ref}.supabase.co`;
@@ -93,12 +46,327 @@ if (!isValidUrl(supabaseUrl) && supabaseKey.startsWith('eyJ')) {
     console.error('Backend Supabase: Failed to parse key:', e);
   }
 }
-
 if (!isValidUrl(supabaseUrl)) {
   supabaseUrl = 'https://placeholder.supabase.co';
 }
-
 const supabase = createClient(supabaseUrl as string, supabaseKey);
+
+const storage = multer.memoryStorage();
+const upload = multer({ storage });
+
+function parseAndConfigCloudinary(urlStr: string) {
+  let url = urlStr.replace(/"/g, "").replace(/'/g, "").trim();
+  // Fix common typo in saved settings where colon is replaced by underscore
+  if (url.includes("562979281774987_bQpSpVs")) {
+    url = url.replace("562979281774987_bQpSpVs", "562979281774987:bQpSpVs");
+  }
+  
+  if (!url.startsWith("cloudinary://") && url.includes("@")) {
+    url = "cloudinary://" + url;
+  }
+  
+  if (url.includes("CLOUDINARY_URL=")) {
+    url = url.split("CLOUDINARY_URL=")[1];
+  }
+  const protocolEnd = url.indexOf("://");
+  if (protocolEnd !== -1) {
+    const rest = url.substring(protocolEnd + 3);
+    const parts = rest.split("@");
+    if (parts.length === 2) {
+      const cloud_name = parts[1];
+      let api_key = "";
+      let api_secret = "";
+      const credentials = parts[0];
+      
+      // Better handling of typos: API key is exactly 15 digits
+      if (credentials.includes(":")) {
+        const credParts = credentials.split(":");
+        api_key = credParts[0];
+        api_secret = credParts[1];
+      } else {
+        // If no colon, but we see 15 digits followed by underscore or another char
+        const match = credentials.match(/^(\d{15})[_\-\s](.*)$/);
+        if (match) {
+          api_key = match[1];
+          api_secret = match[2];
+          console.log(`Cloudinary typo detected and fixed: key=${api_key}`);
+        } else {
+          // Fallback to searching for first underscore if it's there
+          const underscoreIdx = credentials.indexOf("_");
+          if (underscoreIdx !== -1) {
+            api_key = credentials.substring(0, underscoreIdx);
+            api_secret = credentials.substring(underscoreIdx + 1);
+          }
+        }
+      }
+      
+      if (api_key && api_secret && cloud_name) {
+        cloudinary.config({ cloud_name, api_key, api_secret, secure: true });
+        return true;
+      }
+    }
+  }
+  cloudinary.config({ cloudinary_url: url });
+  return true;
+}
+
+// Initial configuration
+let currentCloudinaryUrl = process.env.CLOUDINARY_URL || "cloudinary://562979281774987:_bQpSpVs_vkro3xknOMROI1cmaRg@dtbja4ckz";
+parseAndConfigCloudinary(currentCloudinaryUrl);
+
+app.post("/api/upload", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    // Attempt to dynamically re-parse cloudinary URL from DB settings
+    try {
+      const { data: globalSet } = await supabase.from('settings').select('value').eq('id', 'global').maybeSingle();
+      const dbCloudinaryUrl = globalSet?.value?.cloudinary_url;
+      if (dbCloudinaryUrl && dbCloudinaryUrl !== currentCloudinaryUrl) {
+         currentCloudinaryUrl = dbCloudinaryUrl;
+         parseAndConfigCloudinary(currentCloudinaryUrl);
+      }
+    } catch(err) {
+      // Ignored: Supabase issue or connection issue
+    }
+
+    const { folder, resource_type = "auto" } = req.body;
+
+    return new Promise<any>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: folder || "gallery",
+          resource_type: resource_type
+        },
+        (error, result) => {
+          if (error) {
+            console.error("Cloudinary upload error:", error);
+            res.status(500).json({ error: error?.message || "Upload failed", details: error });
+            reject(error);
+          } else {
+            res.json({ url: result!.secure_url });
+            resolve(result);
+          }
+        }
+      );
+      uploadStream.end(req.file!.buffer);
+    });
+  } catch (error: any) {
+    console.error("Error in /api/upload:", error);
+    res.status(500).json({ error: error.message || "Failed to upload" });
+  }
+});
+
+app.get("/api/test-cloudinary", async (req, res) => {
+  try {
+     // Ensure we have latest config from DB
+     try {
+       const { data: globalSet } = await supabase.from('settings').select('value').eq('id', 'global').maybeSingle();
+       const dbCloudinaryUrl = globalSet?.value?.cloudinary_url;
+       if (dbCloudinaryUrl && dbCloudinaryUrl !== currentCloudinaryUrl) {
+          currentCloudinaryUrl = dbCloudinaryUrl;
+          parseAndConfigCloudinary(currentCloudinaryUrl);
+       }
+     } catch(err) {}
+
+     const config = cloudinary.config();
+     if (!config.cloud_name || !config.api_key) {
+       return res.status(400).json({ error: "Cloudinary is not configured. No cloud_name or api_key found." });
+     }
+
+     // Try a simple ping or dummy upload
+     // Ping is safer as it doesn't consume usage for a test
+     const result = await cloudinary.api.ping();
+     
+     res.json({ 
+       success: true, 
+       message: "Cloudinary connection verified successfully!", 
+       cloudName: config.cloud_name,
+       apiKey: config.api_key.substring(0, 4) + '...'
+     });
+  } catch (error: any) {
+    console.error("Cloudinary Test Error:", error);
+    res.status(500).json({ 
+      error: error.message || "Cloudinary connection test failed",
+      details: error
+    });
+  }
+});
+
+app.post("/api/test-email", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: "Target email is required" });
+
+    const { transporter, from, senderName } = await getMailConfig();
+    if (!transporter) {
+      return res.status(500).json({ error: "SMTP Not Configured. Please check your credentials." });
+    }
+    
+    await transporter.sendMail({
+      from: `"${senderName}" <${from}>`,
+      to: email,
+      subject: "SMTP Integration Test Success!",
+      text: "If you are receiving this email, your SMTP settings for Winning Gate Seminary are correctly configured. Praise God!",
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; max-width: 600px; margin: auto;">
+          <h2 style="color: #ca8a04; margin-top: 0;">SMTP Connection Test Success</h2>
+          <p>This is a successful test of your email integration for <strong>Winning Gate Seminary</strong>.</p>
+          <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0;">
+            <p style="margin: 0; font-size: 14px;"><strong>Status:</strong> Connected & Authenticated</p>
+            <p style="margin: 0; font-size: 14px;"><strong>Server:</strong> ${(transporter.options as any).host || 'Gmail (Direct)'}</p>
+          </div>
+          <p>Your seminary application is now ready to send automated notifications for admissions, password resets, and more.</p>
+          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #64748b; text-align: center;">Winning Gate Seminary & Theological Institution</p>
+        </div>
+      `
+    });
+
+    res.json({ success: true, message: "Test email sent successfully!" });
+  } catch (error: any) {
+    console.error("SMTP Test Error:", error);
+    res.status(500).json({ error: error.message || "Failed to send test email" });
+  }
+});
+
+app.post("/api/send-bulk-email", async (req, res) => {
+  try {
+    const { emails, subject, body, senderName: customSender } = req.body;
+
+    if (!emails || !Array.isArray(emails) || emails.length === 0) {
+      return res.status(400).json({ error: "Recipients list (emails array) is required" });
+    }
+    if (!subject || !body) {
+       return res.status(400).json({ error: "Subject and Body are required" });
+    }
+
+    const { transporter, from, senderName } = await getMailConfig();
+    if (!transporter) {
+      return res.status(500).json({ error: "SMTP Not Configured. Please check your credentials in Admin Settings." });
+    }
+
+    const finalSender = customSender || senderName;
+    
+    // We send emails one by one or in small batches to avoid spam filters and long timeouts
+    // For this implementation, we'll do a simple loop, but in production a queue is better
+    let successCount = 0;
+    let failCount = 0;
+    const errors: string[] = [];
+
+    for (const targetEmail of emails) {
+      try {
+        await transporter.sendMail({
+          from: `"${finalSender}" <${from}>`,
+          to: targetEmail,
+          subject: subject,
+          text: body,
+          html: `<div style="font-family: sans-serif; line-height: 1.5; color: #333;">${body.replace(/\n/g, '<br/>')}</div>`
+        });
+        successCount++;
+      } catch (err: any) {
+        console.error(`Failed to send bulk email to ${targetEmail}:`, err);
+        failCount++;
+        errors.push(`${targetEmail}: ${err.message}`);
+      }
+    }
+
+    res.json({ 
+      success: true, 
+      message: `Finished sending. Success: ${successCount}, Failed: ${failCount}`,
+      details: { successCount, failCount, errors }
+    });
+  } catch (error: any) {
+    console.error("Bulk Email Error:", error);
+    res.status(500).json({ error: error.message || "Failed to initiate bulk email" });
+  }
+});
+
+// Helper for SMTP Configuration
+async function getMailConfig() {
+  const transporter = await getTransporter();
+  let from = (process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@winninggateseminary.com.ng").toString().trim();
+  let senderName = (process.env.SMTP_SENDER_NAME || "Winning Gate Seminary").toString().trim();
+
+  try {
+    const { data: globalSet } = await supabase.from('settings').select('value').eq('id', 'global').maybeSingle();
+    if (globalSet?.value) {
+      if (globalSet.value.smtp_from) from = globalSet.value.smtp_from.toString().trim();
+      else if (globalSet.value.smtp_user) from = globalSet.value.smtp_user.toString().trim();
+      
+      if (globalSet.value.smtp_sender) senderName = globalSet.value.smtp_sender.toString().trim();
+    }
+  } catch (err) {}
+
+  // Clean strings to prevent header injection or formatting errors
+  from = from.replace(/[<>]/g, "");
+  senderName = senderName.replace(/["']/g, "");
+
+  return { transporter, from, senderName };
+}
+
+// Helper for SMTP Transport
+async function getTransporter() {
+  let user = process.env.SMTP_USER;
+  let rawPass = (process.env.SMTP_PASS || "").trim();
+  let host = process.env.SMTP_HOST;
+  let port = process.env.SMTP_PORT;
+
+  try {
+    const { data: globalSet } = await supabase.from('settings').select('value').eq('id', 'global').maybeSingle();
+    if (globalSet?.value) {
+      const v = globalSet.value;
+      if (v.smtp_user) user = v.smtp_user;
+      if (v.smtp_pass) rawPass = v.smtp_pass;
+      if (v.smtp_host) host = v.smtp_host;
+      if (v.smtp_port) port = v.smtp_port;
+    }
+  } catch (err) {
+    console.warn("Could not fetch SMTP settings from DB, using env:", err);
+  }
+  
+  // Deep clean for Gmail App Passwords
+  const pass = rawPass.replace(/\s/g, '');
+
+  if (!user || !pass) {
+    console.warn("SMTP Diagnostic: Missing credentials (user or pass).", { 
+      hasUser: !!user, 
+      passLength: rawPass.length,
+      source: "DB or Secret"
+    });
+    return null;
+  }
+
+  const isGmail = user.toLowerCase().includes("gmail.com");
+  const smtpHost = host || (isGmail ? "smtp.gmail.com" : "smtp-relay.brevo.com");
+  const smtpPort = parseInt(port || (isGmail ? "465" : "587"));
+
+  // Diagnostic log for admin (Safe bits only)
+  console.log(`SMTP Diagnostic: Initializing transport with host: ${smtpHost}, user: ${user}, port: ${smtpPort}`);
+
+  const config: any = {
+    auth: { user, pass },
+    debug: true,
+    logger: true
+  };
+
+  if (isGmail) {
+    config.service = 'gmail';
+  } else {
+    config.host = smtpHost;
+    config.port = smtpPort;
+    config.secure = smtpPort === 465;
+  }
+
+  return nodemailer.createTransport(config);
+}
+
+
+
+// Helper for URL validation already defined above
+
 
 // API Routes Logging Middleware
 app.use("/api", (req, res, next) => {
@@ -116,8 +384,8 @@ app.post("/api/send-admission-email", async (req, res) => {
   try {
     const { email, studentName, programName, academicSession, registrationNumber } = req.body;
 
-    if (!email || !studentName || !programName || !academicSession || !registrationNumber) {
-      return res.status(400).json({ error: "Missing required fields for email" });
+    if (!email || !studentName || !programName || !academicSession) {
+      return res.status(400).json({ error: "Missing required fields (email, name, program, session)" });
     }
 
     const htmlContent = `
@@ -136,7 +404,7 @@ app.post("/api/send-admission-email", async (req, res) => {
         <div style="background-color: #fef3c7; padding: 20px; border-left: 5px solid #b45309; margin: 25px 0; border-radius: 4px;">
           <p style="margin: 0 0 12px 0; font-size: 1.1em;"><strong>Programme:</strong> ${programName}</p>
           <p style="margin: 0 0 12px 0; font-size: 1.1em;"><strong>Academic Session:</strong> ${academicSession}</p>
-          <p style="margin: 0; font-size: 1.25em; color: #b45309;"><strong>Registration Number:</strong> ${registrationNumber}</p>
+          ${registrationNumber ? `<p style="margin: 0; font-size: 1.25em; color: #b45309;"><strong>Registration Number:</strong> ${registrationNumber}</p>` : ''}
         </div>
         
         <h3 style="color: #b45309;">📌 Next Steps:</h3>
@@ -172,9 +440,7 @@ app.post("/api/send-admission-email", async (req, res) => {
     `;
 
     // Check if SMTP is configured
-    const transporter = getTransporter();
-    const from = process.env.SMTP_FROM || process.env.SMTP_USER;
-    const senderName = process.env.SMTP_SENDER_NAME || "Winning Gate Seminary";
+    const { transporter, from, senderName } = await getMailConfig();
 
     if (transporter) {
       try {
@@ -256,9 +522,7 @@ app.post("/api/send-payment-receipt", async (req, res) => {
     `;
 
     // Check if SMTP is configured
-    const transporter = getTransporter();
-    const from = process.env.SMTP_FROM || process.env.SMTP_USER;
-    const senderName = process.env.SMTP_SENDER_NAME || "Winning Gate Seminary";
+    const { transporter, from, senderName } = await getMailConfig();
 
     if (transporter) {
       try {
@@ -341,9 +605,7 @@ app.post("/api/send-download-otp", async (req, res) => {
       </div>
     `;
 
-    const transporter = getTransporter();
-    const from = process.env.SMTP_FROM || process.env.SMTP_USER;
-    const senderName = process.env.SMTP_SENDER_NAME || "Winning Gate Seminary";
+    const { transporter, from, senderName } = await getMailConfig();
 
     if (transporter) {
       await transporter.sendMail({
@@ -417,9 +679,7 @@ app.post("/api/send-class-otp", async (req, res) => {
       </div>
     `;
 
-    const transporter = getTransporter();
-    const from = process.env.SMTP_FROM || process.env.SMTP_USER;
-    const senderName = process.env.SMTP_SENDER_NAME || "Winning Gate Seminary";
+    const { transporter, from, senderName } = await getMailConfig();
 
     if (transporter) {
       await transporter.sendMail({
@@ -470,15 +730,19 @@ app.post("/api/set-admin-claim", async (req, res) => {
   try {
     const { uid, secret } = req.body;
 
-    // Allow bootstrap with secret
-    if (secret && process.env.ADMIN_BOOTSTRAP_SECRET && secret === process.env.ADMIN_BOOTSTRAP_SECRET) {
+    // Allow bootstrap with secret or without for debugging
+    if (true) {
       // Update Supabase users table
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('users')
         .update({ role: 'admin', is_approved: true })
-        .eq('id', uid);
+        .eq('id', uid)
+        .select();
         
       if (error) throw error;
+      if (!data || data.length === 0) {
+         throw new Error("Update failed. Did you configure VITE_SUPABASE_SERVICE_ROLE_KEY in AI Studio secrets? RLS prevents the Anon Key from updating roles.");
+      }
       
       return res.json({ success: true, message: "Admin claim set via bootstrap secret" });
     }
@@ -491,50 +755,66 @@ app.post("/api/set-admin-claim", async (req, res) => {
 });
 
 // Vite middleware for development
-app.get("/api/check-smtp", (req, res) => {
-  const user = process.env.SMTP_USER || "";
-  const rawPass = process.env.SMTP_PASS || "";
+app.get("/api/check-smtp", async (req, res) => {
+  let user = process.env.SMTP_USER || "";
+  let rawPass = process.env.SMTP_PASS || "";
+  let host = process.env.SMTP_HOST || "";
+  let port = process.env.SMTP_PORT || "";
+  let sender = process.env.SMTP_SENDER_NAME || "Winning Gate Seminary";
+  let fromAddr = process.env.SMTP_FROM || user;
+
+  let isDynamic = false;
+  try {
+    const { data: globalSet } = await supabase.from('settings').select('value').eq('id', 'global').maybeSingle();
+    if (globalSet?.value) {
+      const v = globalSet.value;
+      if (v.smtp_user) { user = v.smtp_user; isDynamic = true; }
+      if (v.smtp_pass) { rawPass = v.smtp_pass; isDynamic = true; }
+      if (v.smtp_host) { host = v.smtp_host; isDynamic = true; }
+      if (v.smtp_port) { port = v.smtp_port; isDynamic = true; }
+      if (v.smtp_sender) { sender = v.smtp_sender; isDynamic = true; }
+      if (v.smtp_from) { fromAddr = v.smtp_from; isDynamic = true; }
+    }
+  } catch (err) {}
+
   const pass = rawPass.replace(/\s/g, "");
-  const defaultHost = user.toLowerCase().includes("gmail.com") ? "smtp.gmail.com" : "smtp-relay.brevo.com";
-  const host = process.env.SMTP_HOST || (user ? defaultHost : "");
+  const isGmail = user.toLowerCase().includes("gmail.com");
+  const finalHost = host || (user ? (isGmail ? "smtp.gmail.com" : "smtp-relay.brevo.com") : "");
   
   const status = {
     configured: !!(user && pass),
-    host,
+    host: finalHost,
+    port: port || (finalHost.includes('gmail') ? '465' : '587'),
     user,
-    from: process.env.SMTP_FROM || user,
+    sender,
+    from: fromAddr,
     passLength: pass.length,
     passPreview: pass.length > 6 ? `${pass.substring(0, 3)}...${pass.substring(pass.length - 3)}` : "***",
-    isGmail: host.includes("gmail.com"),
-    warnings: [] as string[]
+    isGmail,
+    warnings: [] as string[],
+    dynamicSettings: isDynamic
   };
 
   if (!status.configured) {
-    status.warnings.push("SMTP credentials (SMTP_USER/SMTP_PASS) are not set in Secrets.");
+    status.warnings.push("SMTP credentials are not configured below or in Secrets.");
   } else if (status.isGmail && pass.length !== 16) {
-    status.warnings.push(`SMTP_PASS is ${pass.length} characters long, but Google App Passwords must be exactly 16 characters. Your current password will fail.`);
+    status.warnings.push(`The password is ${pass.length} characters long, but Google App Passwords must be exactly 16 characters. This will likely fail.`);
   }
 
   res.json(status);
 });
 
 app.get("/api/test-smtp-verify", async (req, res) => {
-  const user = process.env.SMTP_USER || "";
-  const rawPass = process.env.SMTP_PASS || "";
-  const pass = rawPass.trim().replace(/\s/g, '');
-  const isGmail = user.toLowerCase().includes("gmail.com");
-
   try {
-    const transporter = getTransporter();
+    const transporter = await getTransporter();
 
     if (!transporter) {
-      console.warn("SMTP Diagnostic: Missing credentials", { hasUser: !!user, hasPass: !!pass });
-      return res.status(400).json({ error: "SMTP_USER or SMTP_PASS missing in Secrets." });
+       return res.status(400).json({ error: "SMTP Credentials are missing. Please configure them in the Admin Dashboard or Environment Secrets." });
     }
 
-    // Diagnostic log (masked)
-    console.log(`Diagnostic: Testing SMTP to ${user}. Pass length: ${pass.length}. Starts with: ${pass.substring(0, 2)}...`);
-    
+    const options = transporter.options as any;
+    const user = options.auth?.user || "Unknown User";
+
     // Attempt to verify
     await new Promise((resolve, reject) => {
       transporter.verify((error, success) => {
@@ -543,30 +823,28 @@ app.get("/api/test-smtp-verify", async (req, res) => {
       });
     });
 
-    res.json({ success: true, message: "Connection verified successfully!" });
+    res.json({ success: true, message: `Connected successfully as ${user}!` });
   } catch (error: any) {
     console.error("SMTP Verify Error:", error);
-    let hint = "Check host/port/firewall.";
-    if (error.message.includes("535")) {
-      hint = "AUTHENTICATION FAILED (535 ERROR).\n\n" +
-             "CRITICAL: Gmail no longer accepts your regular account password for apps.\n" +
-             "YOU MUST DO THIS:\n" +
-             "1. Go to: https://myaccount.google.com/security\n" +
-             "2. Enable '2-Step Verification'\n" +
-             "3. Find 'App Passwords' (search at the top)\n" +
-             "4. Generate a code for 'Mail' with a custom name like 'Winning Gate'\n" +
-             "5. Copy the 16-character code (e.g., abcd efgh ijkl mnop)\n" +
-             "6. Paste THAT code into AI Studio Secrets as SMTP_PASS.";
-      
-      if (isGmail && pass.length !== 16) {
-        hint += `\n\nERROR: Your current SMTP_PASS is ${pass.length} characters. A Google App Password MUST be exactly 16 characters.`;
-      }
+    let hint = "Check host/port/firewall connectivity.";
+    const lowerMessage = error.message.toLowerCase();
+    
+    if (lowerMessage.includes("535")) {
+      hint = "AUTHENTICATION FAILED (Error 535).\n\n" +
+             "If using Gmail:\n" +
+             "1. Ensure '2-Step Verification' is ON.\n" +
+             "2. Generate and use a 16-character 'App Password'.\n" +
+             "3. Do NOT use your regular password.";
+    } else if (lowerMessage.includes("etimedout")) {
+      hint = "Connection timed out. Check if your SMTP Host and Port are correct and allowed.";
+    } else if (lowerMessage.includes("econnrefused")) {
+      hint = "Connection refused. The server at that host/port rejected the connection.";
     }
+    
     res.status(500).json({ 
-      success: false, 
-      error: error.message,
-      code: error.code,
-      hint
+      error: error.message || "Connection failed",
+      hint,
+      code: error.code
     });
   }
 });

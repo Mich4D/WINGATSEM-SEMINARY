@@ -23,6 +23,7 @@ import VerifyStudent from './pages/VerifyStudent';
 import Footer from './components/Footer';
 import AIChat from './components/AIChat';
 import InstallPWA from './components/InstallPWA';
+import FloatingWhatsApp from './components/FloatingWhatsApp';
 import { SettingsProvider } from './contexts/SettingsContext';
 
 // Global gate to catch password recovery links
@@ -60,7 +61,15 @@ const PrivateRoute = ({ children, roles }: { children: ReactNode, roles?: ('stud
     </div>
   );
 
-  if (!user && !profile) return <Navigate to="/" />;
+  if (!user && !profile) {
+    if (roles?.includes('admin')) {
+      return <Navigate to="/login?role=admin" state={{ from: location }} />;
+    }
+    if (roles?.includes('teacher')) {
+      return <Navigate to="/teacher-login" state={{ from: location }} />;
+    }
+    return <Navigate to="/login" state={{ from: location }} />;
+  }
 
   if (roles && profile && !roles.includes(profile.role)) {
     // If they are an admin trying to access student dashboard, send to admin
@@ -141,6 +150,7 @@ export default function App() {
                 </main>
                 <Footer />
                 <AIChat />
+                <FloatingWhatsApp />
                 <InstallPWA />
               </div>
             } />

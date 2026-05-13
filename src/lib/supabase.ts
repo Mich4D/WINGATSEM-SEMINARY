@@ -6,7 +6,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 // Helper to check if a URL is valid
 const isValidUrl = (url: string | undefined) => {
   try {
-    if (!url || url === 'undefined') return false;
+    if (!url || url === 'undefined' || url.includes('placeholder')) return false;
     new URL(url);
     return true;
   } catch (e) {
@@ -16,32 +16,48 @@ const isValidUrl = (url: string | undefined) => {
 
 // Robust URL detection
 let finalUrl = supabaseUrl;
-const finalKey = supabaseAnonKey && supabaseAnonKey !== 'YOUR_SUPABASE_ANON_KEY' ? supabaseAnonKey : 'placeholder-key';
+const finalKey = supabaseAnonKey && supabaseAnonKey !== 'YOUR_SUPABASE_ANON_KEY' ? supabaseAnonKey : '';
 
-if (!isValidUrl(finalUrl) && finalKey.startsWith('eyJ')) {
+// Function to decode JWT securely
+const decodeJWT = (token: string) => {
   try {
-    // Try to extract project ref from JWT
-    const payload = JSON.parse(atob(finalKey.split('.')[1]));
-    if (payload.ref) {
-      finalUrl = `https://${payload.ref}.supabase.co`;
-      console.log('Reconstructed Supabase URL from Key:', finalUrl);
-    }
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
   } catch (e) {
-    console.error('Failed to parse Supabase key:', e);
+    return null;
+  }
+};
+
+if (!isValidUrl(finalUrl) && finalKey && finalKey.startsWith('eyJ')) {
+  const payload = decodeJWT(finalKey);
+  if (payload && payload.ref) {
+    finalUrl = `https://${payload.ref}.supabase.co`;
+    console.log('Successfully reconstructed Supabase URL from Anon Key:', finalUrl);
   }
 }
 
-if (!isValidUrl(finalUrl)) {
-  finalUrl = 'https://placeholder.supabase.co';
+const isUsingPlaceholder = !isValidUrl(finalUrl) || !finalKey;
+
+if (isUsingPlaceholder) {
+  // If we still don't have a valid URL but we HAVE a key that looks like it might have a ref
+  // but Reconstruction failed for some reason, we use a slightly better fallback if possible
+  finalUrl = finalUrl || 'https://placeholder.supabase.co';
 }
 
-console.log('Supabase Init:', { 
+console.log('Supabase Final Config:', { 
   url: finalUrl, 
-  hasKey: !!supabaseAnonKey && supabaseAnonKey !== 'YOUR_SUPABASE_ANON_KEY' 
+  hasKey: !!finalKey,
+  isPlaceholder: isUsingPlaceholder,
+  envUrlAvailable: !!supabaseUrl,
+  envKeyAvailable: !!supabaseAnonKey
 });
 
-if (finalUrl.includes('placeholder') || !supabaseAnonKey || supabaseAnonKey === 'YOUR_SUPABASE_ANON_KEY') {
-  console.warn('Supabase credentials not found or invalid. Using placeholder credentials. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment variables.');
+if (isUsingPlaceholder) {
+  console.warn('CRITICAL: Supabase credentials missing. Check your environment variables / secrets.');
 }
 
-export const supabase = createClient(finalUrl as string, finalKey as string);
+export const supabase = createClient(finalUrl as string, finalKey || 'placeholder-key');

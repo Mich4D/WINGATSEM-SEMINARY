@@ -31,7 +31,7 @@ export default function PaymentButton({
 }: PaymentButtonProps) {
   const [isVerifying, setIsVerifying] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const { logoUrl } = useSettings();
+  const { logoUrl, flutterwavePublicKey: globalPublicKey } = useSettings();
 
   const loadFlutterwaveScript = (): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -66,7 +66,7 @@ export default function PaymentButton({
 
       await loadFlutterwaveScript();
 
-      const publicKey = (flutterwavePublicKey || "").trim();
+      const publicKey = (flutterwavePublicKey || globalPublicKey || "").trim();
 
       if (!publicKey || (!publicKey.startsWith('FLWPUBK_') && !publicKey.startsWith('FLWPUBK-'))) {
         alert("Payment system is not yet configured with a valid Public Key. Please contact administrator.");

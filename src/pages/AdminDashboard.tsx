@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { supabase } from '../lib/supabase';
-import { Users, Book, Settings, FileText, CheckCircle, XCircle, Upload, Download, Video, Image as ImageIcon, ArrowLeft, Award, Mail, X, GraduationCap, Copy, ShieldCheck, CreditCard, Search, DollarSign, ExternalLink, Globe } from 'lucide-react';
+import { Users, Book, Settings, FileText, CheckCircle, XCircle, Upload, Download, Video, Image as ImageIcon, ArrowLeft, Award, Mail, X, GraduationCap, Copy, ShieldCheck, CreditCard, Search, DollarSign, ExternalLink, Globe, Megaphone, Send, Cloud } from 'lucide-react';
 
 import { formatImageUrl } from '../utils/formatImage';
+import { compressImage } from '../utils/imageUpload';
 import AdminBlog from '../components/AdminBlog';
 
 export default function AdminDashboard() {
@@ -13,11 +14,38 @@ export default function AdminDashboard() {
   const { refreshSettings } = useSettings();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('students');
+  const [settingsTab, setSettingsTab] = useState<'identity' | 'integrations'>('identity');
   const [toastMessage, setToastMessage] = useState<{text: string, type: 'success' | 'error'} | null>(null);
   
   const showToast = (text: string, type: 'success' | 'error' = 'success', duration: number = 3000) => {
     setToastMessage({ text, type });
     setTimeout(() => setToastMessage(null), duration);
+  };
+
+  const handleTestEmail = async () => {
+    if (!testEmail) {
+      showToast("Please enter a recipient email", "error");
+      return;
+    }
+    setIsTestingEmail(true);
+    try {
+      const response = await fetch('/api/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: testEmail })
+      });
+      const data = await response.json();
+      if (data.success) {
+        showToast("Test email sent! Check your inbox (and spam).", "success");
+      } else {
+        throw new Error(data.error || "Failed to send test email");
+      }
+    } catch (err: any) {
+      console.error("Test Email error:", err);
+      showToast(err.message, "error");
+    } finally {
+      setIsTestingEmail(false);
+    }
   };
   const [students, setStudents] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
@@ -31,17 +59,29 @@ export default function AdminDashboard() {
   const [newCourse, setNewCourse] = useState({ course_name: '', level: '100' });
   const [newDepartment, setNewDepartment] = useState({ name: '', code: '' });
   const [newTeacher, setNewTeacher] = useState({ name: '', email: '', department: '' });
+  const [newTestimonial, setNewTestimonial] = useState({ quote: '', author: '', role: '', img: '' });
   const [liveClassDept, setLiveClassDept] = useState('General');
   const [liveClassLevel, setLiveClassLevel] = useState('100');
   const [settings, setSettings] = useState({ 
     logoUrl: '', 
     rectorImageUrl: '', 
     heroBgUrl: '', 
+    heroBanners: [] as string[],
+    testimonials: [] as { quote: string; author: string; role: string; img: string; }[],
     aboutImageUrl: '' as string | null,
     liveStreamUrl: '',
     anthemUrl: '',
     anthemTitle: 'School Anthem',
+    admissionFlyerUrl: '',
+    siteUrl: '',
     flutterwavePublicKey: '',
+    cloudinaryUrl: '',
+    smtpHost: '',
+    smtpPort: '',
+    smtpUser: '',
+    smtpPass: '',
+    smtpSender: '',
+    smtpFrom: '',
     isAdmissionOpen: true,
     importantDates: {
       applicationOpens: 'Aug 15',
@@ -75,6 +115,11 @@ export default function AdminDashboard() {
   const [newGrade, setNewGrade] = useState({ courseName: '', credits: 3, score: '', grade: '' });
   const [newAssignment, setNewAssignment] = useState({ courseName: '', assignmentName: '', status: 'pending', score: '' });
   const [uploadingType, setUploadingType] = useState<string | null>(null);
+  const [newBannerUrl, setNewBannerUrl] = useState('');
+  const [testEmail, setTestEmail] = useState('');
+  const [isTestingEmail, setIsTestingEmail] = useState(false);
+  const [bulkEmailMessage, setBulkEmailMessage] = useState({ subject: '', body: '', target: 'all' as 'all' | 'students' | 'teachers' });
+  const [isSendingBulk, setIsSendingBulk] = useState(false);
   const [smtpDiagnostic, setSmtpDiagnostic] = useState<{
     configured: boolean, 
     warnings: string[],
@@ -185,9 +230,26 @@ export default function AdminDashboard() {
     };
 
     const fetchSettings = async () => {
-      const { data } = await supabase.from('settings').select('*').in('id', ['global', 'department_durations']);
+      const { data } = await supabase.from('settings').select('*').in('id', ['global', 'department_durations', 'hero_banners', 'testimonials']);
       if (data) {
         const globalSettings = data.find(s => s.id === 'global');
+        const heroBannersRow = data.find(s => s.id === 'hero_banners');
+        const testimonialsRow = data.find(s => s.id === 'testimonials');
+        
+        let parsedBanners: string[] = [];
+        if (heroBannersRow && heroBannersRow.value) {
+          try {
+            parsedBanners = Array.isArray(heroBannersRow.value) ? heroBannersRow.value : JSON.parse(heroBannersRow.value as string);
+          } catch (e) {}
+        }
+
+        let parsedTestimonials: any[] = [];
+        if (testimonialsRow && testimonialsRow.value) {
+          try {
+            parsedTestimonials = Array.isArray(testimonialsRow.value) ? testimonialsRow.value : JSON.parse(testimonialsRow.value as string);
+          } catch (e) {}
+        }
+
         if (globalSettings) {
           setSettings({
             logoUrl: globalSettings.logoUrl || globalSettings.logo_url || '',
@@ -197,20 +259,32 @@ export default function AdminDashboard() {
             liveStreamUrl: globalSettings.liveStreamUrl || globalSettings.live_stream_url || '',
             anthemUrl: globalSettings.anthemUrl || globalSettings.anthem_url || '',
             anthemTitle: globalSettings.anthemTitle || globalSettings.anthem_title || 'School Anthem',
-            flutterwavePublicKey: globalSettings.flutterwave_public_key || globalSettings.flutterwavePublicKey || '',
+            admissionFlyerUrl: globalSettings.admissionFlyerUrl || globalSettings.admission_flyer_url || '',
+            heroBanners: parsedBanners.length > 0 ? parsedBanners : (globalSettings.hero_banners || []),
+            testimonials: parsedTestimonials,
+            siteUrl: globalSettings.site_url || globalSettings.siteUrl || globalSettings.value?.site_url || '',
+            flutterwavePublicKey: '',
+            cloudinaryUrl: '',
+            smtpHost: '',
+            smtpPort: '',
+            smtpUser: '',
+            smtpPass: '',
+            smtpSender: globalSettings.value?.smtp_sender || 'Winning Gate Seminary',
+            smtpFrom: globalSettings.value?.smtp_from || '',
             isAdmissionOpen: globalSettings.is_admission_open ?? true,
             importantDates: globalSettings.important_dates || {
               applicationOpens: 'Aug 15',
               applicationDeadline: 'Oct 30',
               orientationBegins: 'Nov 15'
             },
-            fees: globalSettings.fees || {
-              registration: 10000,
+            fees: {
+              registration: globalSettings.fees?.registration || 10000,
+              currency: globalSettings.fees?.currency || 'NGN',
               tuition: {
-                diploma: 100000,
-                bachelor: 120000,
-                master: 150000,
-                doctorate: 180000
+                diploma: globalSettings.fees?.tuition?.diploma || 100000,
+                bachelor: globalSettings.fees?.tuition?.bachelor || 120000,
+                master: globalSettings.fees?.tuition?.master || 150000,
+                doctorate: globalSettings.fees?.tuition?.doctorate || 180000
               }
             }
           });
@@ -276,7 +350,7 @@ export default function AdminDashboard() {
     fetch('/api/check-smtp')
       .then(res => res.json())
       .then(data => setSmtpDiagnostic(data))
-      .catch(err => console.error("SMTP diagnostic failed:", err));
+      .catch(err => console.warn("SMTP diagnostic check skipped/unavailable:", err.message));
 
     setLoading(false);
 
@@ -449,6 +523,8 @@ export default function AdminDashboard() {
   const handleAddTeacher = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      showToast("Adding teacher...");
+      
       // Generate teacher reg number
       const year = new Date().getFullYear().toString().slice(-2);
       const { data: counterData } = await supabase.from('settings').select('value').eq('id', `teacherCounter_${year}`).single();
@@ -459,49 +535,50 @@ export default function AdminDashboard() {
       const paddedCount = newCount.toString().padStart(4, '0');
       const regNumber = `WGTS/TCH/${year}/${paddedCount}`;
 
-      // Extremely robust ID generator
-      const teacherId = (typeof crypto !== 'undefined' && crypto.randomUUID) 
-        ? crypto.randomUUID() 
-        : 'xxxxxxxx-xxxx-4000-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-            const r = Math.random() * 16 | 0;
-            const v = c === 'x' ? r : (r & 0x3 | 0x8);
-            return v.toString(16);
-          });
-
-      if (!teacherId) throw new Error("Failed to generate a valid teacher ID");
-
       // Create teacher in users table
-      const { error } = await supabase.from('users').insert({
-        id: teacherId,
+      const { data: insertedTeacher, error } = await supabase.from('users').insert({
+        id: crypto.randomUUID(),
         name: newTeacher.name,
         email: newTeacher.email,
         role: 'teacher',
         registration_number: regNumber,
         department_code: newTeacher.department,
         is_approved: true
-      });
+      }).select().single();
 
       if (error) {
         console.error("Teacher addition error details:", error);
+        
+        if (error.code === '42P01') {
+          throw new Error('The "users" table does not exist. Please run the SQL in SCHEMA.md first.');
+        }
+
+        // RLS Error - Most likely current user is NOT an admin in the database
         if (error.message.includes('row-level security') || error.code === '42501') {
-          throw new Error('Database security policy (RLS) is blocking the insert. Please run the SQL fix in the Supabase SQL Editor.');
+          const { data: { user } } = await supabase.auth.getUser();
+          const { data: dbUser } = user ? await supabase.from('users').select('role').eq('id', user.id).single() : { data: null };
+          
+          if (!dbUser || dbUser.role !== 'admin') {
+            throw new Error(`Access Denied: Your account role is "${dbUser?.role || 'unknown'}" in the database. You must be an "admin" to add teachers. See SCHEMA.md "Admin Troubleshooting" section.`);
+          }
+          
+          throw new Error('Database security policy (RLS) is blocking the insert even though you are an admin. Please ensure you have run the latest version of the SQL in SCHEMA.md.');
         }
-        if (error.message.includes('NOT NULL') || error.message.includes('not-null')) {
-          throw new Error(`Database Error: ${error.message}. This usually means a column like "id" is missing a default or is not being correctly passed. Diagnostic: ID=${teacherId}`);
-        }
-        throw error;
+        
+        throw new Error(error.message);
       }
 
-      showToast(`Teacher added! Passkey: ${regNumber}`);
+      showToast(`Teacher added! Passkey: ${regNumber}`, "success", 10000);
       setNewTeacher({ name: '', email: '', department: '' });
       
-      // Refresh teachers
-      const { data, error: tErr } = await supabase.rpc('admin_get_all_users');
-      const finalData = data || (await supabase.from('users').select('*')).data;
-      if (finalData) setTeachers(finalData.filter((u: any) => u.role === 'teacher'));
+      // Refresh teachers list
+      const { data: allUsers } = await supabase.from('users').select('*');
+      if (allUsers) {
+        setTeachers(allUsers.filter((u: any) => u.role === 'teacher'));
+      }
     } catch (error: any) {
       console.error("Error adding teacher:", error);
-      showToast(`Failed to add teacher: ${error.message}`, "error");
+      showToast(error.message || "Failed to add teacher", "error");
     }
   };
 
@@ -548,16 +625,36 @@ export default function AdminDashboard() {
 
     try {
       // Upload the certificate file
-      const filePath = `${issueCertificateModal}/${Date.now()}_${newCertificate.file.name}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('App_files')
-        .upload(filePath, newCertificate.file);
-        
-      if (uploadError) throw uploadError;
+      if (newCertificate.file.size > 10 * 1024 * 1024) {
+        showToast("Certificate file is too large! Please upload a file smaller than 10MB.", "error");
+        return;
+      }
+      let downloadUrl = '';
+      const processedFile = await compressImage(newCertificate.file);
       
-      const { data: { publicUrl: downloadUrl } } = supabase.storage
-        .from('App_files')
-        .getPublicUrl(filePath);
+      const fallbackToBase64 = async (f: File) => {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(f);
+        });
+      };
+
+      try {
+        const formData = new FormData();
+        formData.append("file", processedFile);
+        formData.append("folder", issueCertificateModal || "certificates");
+        const res = await fetch("/api/upload", { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.url) {
+          downloadUrl = data.url;
+        } else {
+          throw new Error(data.error || "Upload failed");
+        }
+      } catch (err) {
+        console.warn("Cloudinary upload failed, attempting Base64 fallback...", err);
+        downloadUrl = await fallbackToBase64(processedFile);
+      }
 
       await supabase.from('certificates').insert({
         user_id: issueCertificateModal,
@@ -653,10 +750,12 @@ export default function AdminDashboard() {
     btn.innerText = 'Saving...';
     btn.disabled = true;
     try {
-      await supabase.from('settings').upsert({
-        id: 'global',
+      const { error } = await supabase.from('settings').update({
         fees: settings.fees
-      });
+      }).eq('id', 'global');
+      if (error) {
+        await supabase.from('settings').upsert({ id: 'global', fees: settings.fees });
+      }
       showToast("Fee settings saved successfully!");
       btn.innerText = 'Saved Successfully!';
       btn.classList.remove('bg-yellow-600', 'hover:bg-yellow-700');
@@ -722,13 +821,19 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'rectorImage' | 'aboutImage' | 'heroBg' | 'anthem') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'rectorImage' | 'aboutImage' | 'heroBg' | 'anthem' | 'admissionFlyer') => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast(`File is too large! Please select a file smaller than 10MB.`, "error");
+      return;
+    }
 
     setUploadingType(type);
     try {
       let finalUrl = '';
+      const processedFile = await compressImage(file);
       const fallbackToBase64 = async (f: File) => {
         return new Promise<string>((resolve) => {
           const reader = new FileReader();
@@ -737,28 +842,28 @@ export default function AdminDashboard() {
         });
       };
 
-      if (import.meta.env.VITE_SUPABASE_URL?.includes('placeholder') || !import.meta.env.VITE_SUPABASE_URL) {
-        console.warn("Supabase not configured. Falling back to Base64 dataset upload.");
-        finalUrl = await fallbackToBase64(file);
-      } else {
-        const filePath = `${type}_${Date.now()}`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('App_files')
-          .upload(filePath, file);
-          
-        if (uploadError) {
-          if (uploadError.message === 'Failed to fetch' || uploadError.message.includes('fetch')) {
-            console.warn("Network/CORS error on storage. Falling back to Base64.", uploadError);
-            finalUrl = await fallbackToBase64(file);
-          } else {
-            throw uploadError;
-          }
+      try {
+        const formData = new FormData();
+        formData.append("file", processedFile);
+        formData.append("folder", `settings/${type}`);
+        if (type === 'anthem') formData.append("resource_type", "video");
+
+        const res = await fetch("/api/upload", { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.url) {
+          finalUrl = data.url;
         } else {
-          const { data: { publicUrl } } = supabase.storage
-            .from('App_files')
-            .getPublicUrl(filePath);
-          finalUrl = publicUrl;
+          throw new Error(data.error || "Upload failed");
         }
+      } catch (err: any) {
+        console.warn(`Cloudinary upload failed for ${type}.`, err);
+        if (type === 'anthem') {
+           showToast("Audio upload failed: " + (err.message || "Unknown Cloudinary configuration error"), "error");
+           setUploadingType(null);
+           return;
+        }
+        console.warn("Using Base64 fallback.", err);
+        finalUrl = await fallbackToBase64(processedFile);
       }
 
       if (!finalUrl) throw new Error("Failed to generate file URL.");
@@ -769,6 +874,12 @@ export default function AdminDashboard() {
           value: JSON.stringify({ url: finalUrl, title: settings.anthemTitle || 'School Anthem' })
         });
         if (error) throw error;
+        
+        // Also save to global row
+        await supabase.from('settings').update({
+          anthem_url: finalUrl,
+          anthem_title: settings.anthemTitle || 'School Anthem'
+        }).eq('id', 'global');
       } else if (type === 'aboutImage') {
         const { error } = await supabase.from('settings').upsert({
           id: 'about',
@@ -779,13 +890,20 @@ export default function AdminDashboard() {
         const dbKey = type === 'logo' ? 'logo_url' : 
                       type === 'rectorImage' ? 'rector_image_url' : 
                       type === 'heroBg' ? 'hero_bg_url' :
+                      type === 'admissionFlyer' ? 'admission_flyer_url' :
                       type;
   
-        const { error } = await supabase.from('settings').upsert({
-          id: 'global',
-          [dbKey]: finalUrl
-        });
-        if (error) throw error;
+        const { error } = await supabase.from('settings')
+          .update({ [dbKey]: finalUrl })
+          .eq('id', 'global');
+          
+        if (error) {
+          const { error: upsertError } = await supabase.from('settings').upsert({
+            id: 'global',
+            [dbKey]: finalUrl
+          });
+          if (upsertError) throw upsertError;
+        }
       }
       
       await refreshSettings();
@@ -793,13 +911,173 @@ export default function AdminDashboard() {
       showToast(`${type} uploaded successfully!`);
     } catch (error: any) {
       console.error("Upload error:", error);
+      let errorMsg = error.message;
+      if (errorMsg === 'Failed to fetch') {
+        errorMsg = 'Failed to fetch (Check your internet connection or Supabase credentials)';
+      }
+      showToast(`Upload failed: ${errorMsg}`);
+    } finally {
+      setUploadingType(null);
+    }
+  };
+
+  const handleBannersUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploadingType('heroBanners');
+    try {
+      const bannerUrls: string[] = [...(settings.heroBanners || [])];
+      
+      for (let i = 0; i < files.length; i++) {
+        if (bannerUrls.length >= 4) break;
+        const file = files[i];
+        if (file.size > 10 * 1024 * 1024) {
+          showToast(`File ${file.name} is too large (>10MB). Skipping.`, "error");
+          continue;
+        }
+        const processedFile = await compressImage(file);
+        
+        let url = '';
+        try {
+          const formData = new FormData();
+          formData.append("file", processedFile);
+          formData.append("folder", "settings/banners");
+          const res = await fetch("/api/upload", { method: "POST", body: formData });
+          const data = await res.json();
+          if (data.url) {
+            url = data.url;
+          } else {
+            throw new Error(data.error || "Upload failed");
+          }
+        } catch (err) {
+          console.warn("Cloudinary upload failed, using Base64 fallback.", err);
+          url = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(processedFile);
+          });
+        }
+        bannerUrls.push(url);
+      }
+
+      const { error } = await supabase.from('settings').upsert({ id: 'hero_banners', value: JSON.stringify(bannerUrls) });
+      if (error) throw error;
+      
+      await refreshSettings();
+      setSettings(prev => ({ ...prev, heroBanners: bannerUrls }));
+      showToast("Banners uploaded successfully!");
+    } catch (error: any) {
+      console.error("Banner upload error:", error);
       showToast(`Upload failed: ${error.message}`);
     } finally {
       setUploadingType(null);
     }
   };
 
-  const handleUrlSave = async (e: React.MouseEvent<HTMLButtonElement>, type: 'logo' | 'rectorImage' | 'aboutImage' | 'heroBg' | 'liveStream' | 'anthem', url: string) => {
+  const removeBanner = async (index: number) => {
+    try {
+      const newBanners = settings.heroBanners?.filter((_, i) => i !== index) || [];
+      const { error } = await supabase.from('settings').upsert({ id: 'hero_banners', value: JSON.stringify(newBanners) });
+      if (error) throw error;
+      
+      await refreshSettings();
+      setSettings(prev => ({ ...prev, heroBanners: newBanners }));
+      showToast("Banner removed!");
+    } catch (error: any) {
+      showToast(`Action failed: ${error.message}`);
+    }
+  };
+
+  const handleAddTestimonial = async () => {
+    if (!newTestimonial.quote || !newTestimonial.author || !newTestimonial.role) {
+      showToast("Please fill in quote, author, and role", "error");
+      return;
+    }
+    try {
+      const updatedTestimonials = [...(settings.testimonials || []), newTestimonial];
+      const { error } = await supabase.from('settings').upsert({ id: 'testimonials', value: JSON.stringify(updatedTestimonials) });
+      if (error) throw error;
+      
+      await refreshSettings();
+      setSettings(prev => ({ ...prev, testimonials: updatedTestimonials }));
+      setNewTestimonial({ quote: '', author: '', role: '', img: '' });
+      showToast("Testimonial added!");
+    } catch (error: any) {
+      showToast(`Action failed: ${error.message}`, "error");
+    }
+  };
+
+  const handleRemoveTestimonial = async (index: number) => {
+    try {
+      const updatedTestimonials = settings.testimonials?.filter((_, i) => i !== index) || [];
+      const { error } = await supabase.from('settings').upsert({ id: 'testimonials', value: JSON.stringify(updatedTestimonials) });
+      if (error) throw error;
+      
+      await refreshSettings();
+      setSettings(prev => ({ ...prev, testimonials: updatedTestimonials }));
+      showToast("Testimonial removed!");
+    } catch (error: any) {
+      showToast(`Action failed: ${error.message}`, "error");
+    }
+  };
+
+  const handleTestimonialImgUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingType('testimonialImg');
+    try {
+      if (file.size > 10 * 1024 * 1024) throw new Error("File too large (>10MB).");
+      const processedFile = await compressImage(file);
+        
+      let url = '';
+      try {
+        const formData = new FormData();
+        formData.append("file", processedFile);
+        formData.append("folder", "settings/testimonials");
+        const res = await fetch("/api/upload", { method: "POST", body: formData });
+        const data = await res.json();
+        if (data.url) url = data.url;
+        else throw new Error(data.error || "Upload failed");
+      } catch (err) {
+        url = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(processedFile);
+        });
+      }
+      setNewTestimonial(prev => ({ ...prev, img: url }));
+      showToast("Testimonial image prepared.");
+    } catch (error: any) {
+      console.error(error);
+      showToast("Upload failed: " + error.message, "error");
+    } finally {
+      setUploadingType(null);
+    }
+  };
+
+  const handleAddBannerUrl = async () => {
+    if (!newBannerUrl.trim()) return;
+    if ((settings.heroBanners?.length || 0) >= 4) {
+      showToast("Maximum of 4 banners allowed", 'error');
+      return;
+    }
+    try {
+      const newBanners = [...(settings.heroBanners || []), newBannerUrl.trim()];
+      const { error } = await supabase.from('settings').upsert({ id: 'hero_banners', value: JSON.stringify(newBanners) });
+      if (error) throw error;
+      
+      await refreshSettings();
+      setSettings(prev => ({ ...prev, heroBanners: newBanners }));
+      setNewBannerUrl('');
+      showToast("Banner added from URL!");
+    } catch (error: any) {
+      showToast(`Action failed: ${error.message}`, 'error');
+    }
+  };
+
+  const handleUrlSave = async (e: React.MouseEvent<HTMLButtonElement>, type: 'logo' | 'rectorImage' | 'aboutImage' | 'heroBg' | 'liveStream' | 'anthem' | 'admissionFlyer', url: string) => {
     const btn = e.currentTarget;
     const originalText = btn.innerText;
     btn.innerText = 'Saving...';
@@ -813,24 +1091,43 @@ export default function AdminDashboard() {
           value: JSON.stringify({ url: formattedUrl, title: settings.anthemTitle || 'School Anthem' })
         });
         if (error) throw error;
+        
+        // Also save to global row
+        await supabase.from('settings').update({
+          anthem_url: formattedUrl,
+          anthem_title: settings.anthemTitle || 'School Anthem'
+        }).eq('id', 'global');
       } else if (type === 'aboutImage') {
         const { error } = await supabase.from('settings').upsert({
           id: 'about',
           value: JSON.stringify({ url: formattedUrl })
         });
         if (error) throw error;
+        
+        // Also update global row
+        await supabase.from('settings').update({
+          about_image_url: formattedUrl
+        }).eq('id', 'global');
       } else {
         const dbKey = type === 'logo' ? 'logo_url' : 
                       type === 'rectorImage' ? 'rector_image_url' : 
                       type === 'heroBg' ? 'hero_bg_url' : 
                       type === 'liveStream' ? 'live_stream_url' :
+                      type === 'admissionFlyer' ? 'admission_flyer_url' :
                       type;
   
-        const { error } = await supabase.from('settings').upsert({
-          id: 'global',
-          [dbKey]: formattedUrl
-        });
-        if (error) throw error;
+        const { error } = await supabase.from('settings')
+          .update({ [dbKey]: formattedUrl })
+          .eq('id', 'global');
+          
+        if (error) {
+          // If update failed because row doesn't exist (rare), try upsert
+          const { error: upsertError } = await supabase.from('settings').upsert({
+            id: 'global',
+            [dbKey]: formattedUrl
+          });
+          if (upsertError) throw upsertError;
+        }
       }
       
       await refreshSettings();
@@ -847,7 +1144,13 @@ export default function AdminDashboard() {
       }, 3000);
     } catch (error: any) {
       console.error("Save error:", error);
-      showToast(`Failed to save URL: ${error.message}`, "error");
+      let errorMsg = error.message;
+      if (errorMsg === 'Failed to fetch') {
+        errorMsg = 'Failed to fetch (Your firewall/ad-blocker might be blocking Supabase, or credentials are invalid)';
+      } else if (errorMsg.includes('column') && errorMsg.includes('not found')) {
+        errorMsg = `${errorMsg}. Please ensure you've applied the SQL migrations in SCHEMA.md to your Supabase project.`;
+      }
+      showToast(`Failed to save URL: ${errorMsg}`, "error");
       btn.innerText = 'Failed';
       btn.classList.remove('bg-slate-900', 'hover:bg-slate-800');
       btn.classList.add('bg-red-600', 'hover:bg-red-700');
@@ -978,86 +1281,347 @@ export default function AdminDashboard() {
   return (
     <div className="bg-slate-50 min-h-screen py-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-10">
-          <h1 className="text-3xl font-serif font-bold text-slate-900">Admin Dashboard</h1>
-          <p className="text-slate-600">Manage students, courses, and settings.</p>
+        <div className="mb-8 md:mb-12 bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl md:text-4xl font-display font-black text-slate-900 tracking-tight mb-2">Admin Dashboard</h1>
+            <p className="text-slate-500 font-medium tracking-wide">Manage students, courses, and system settings seamlessly.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="bg-yellow-50 text-yellow-700 px-4 py-2 rounded-full font-bold text-sm border border-yellow-100 shadow-sm flex items-center gap-2">
+              <ShieldCheck size={16} /> Administrator
+            </div>
+          </div>
         </div>
 
         <div className="flex flex-col md:flex-row gap-8">
           {/* Sidebar */}
-          <div className="w-full md:w-64 shrink-0">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-col gap-2">
+          <div className="w-full md:w-64 md:shrink-0 overflow-x-auto pb-4 md:pb-0">
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-2 md:p-4 flex flex-row md:flex-col gap-2 min-w-max md:min-w-0">
               <button 
                 onClick={() => setActiveTab('students')}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'students' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap ${activeTab === 'students' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 <Users size={20} /> Students
               </button>
               <button 
                 onClick={() => setActiveTab('teachers')}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'teachers' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap ${activeTab === 'teachers' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 <Award size={20} /> Teachers
               </button>
               <button 
                 onClick={() => setActiveTab('departments')}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'departments' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap ${activeTab === 'departments' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 <Book size={20} /> Departments
               </button>
               <button 
                 onClick={() => setActiveTab('courses')}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'courses' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap ${activeTab === 'courses' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 <FileText size={20} /> Courses
               </button>
               <button 
                 onClick={() => setActiveTab('live')}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'live' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap ${activeTab === 'live' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 <Video size={20} /> Live Classes
               </button>
               <button 
                 onClick={() => setActiveTab('gallery')}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'gallery' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap ${activeTab === 'gallery' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 <ImageIcon size={20} /> Gallery & Media
               </button>
               <button 
                 onClick={() => setActiveTab('blog')}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'blog' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap ${activeTab === 'blog' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 <FileText size={20} /> Blog Updates
               </button>
               <button 
                 onClick={() => setActiveTab('finance')}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'finance' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap ${activeTab === 'finance' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 <CreditCard size={20} /> Finance
               </button>
               <button 
                 onClick={() => setActiveTab('academic')}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'academic' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap ${activeTab === 'academic' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 <Award size={20} /> Academic Records
               </button>
               <button 
                 onClick={() => setActiveTab('messages')}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'messages' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap ${activeTab === 'messages' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 <Mail size={20} /> Messages
               </button>
               <button 
                 onClick={() => setActiveTab('settings')}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors ${activeTab === 'settings' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap ${activeTab === 'settings' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 <Settings size={20} /> Settings
+              </button>
+              <button 
+                onClick={() => setActiveTab('diagnostic')}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors whitespace-nowrap ${activeTab === 'diagnostic' ? 'bg-yellow-50 text-yellow-700' : 'text-slate-600 hover:bg-slate-50'}`}
+              >
+                <ShieldCheck size={20} /> System Diagnostic
               </button>
             </div>
           </div>
 
           {/* Main Content */}
           <div className="flex-grow w-full md:min-w-0">
+            {activeTab === 'diagnostic' && (
+              <div className="space-y-6">
+                <div className="bg-white rounded-2xl shadow-md border border-slate-100 p-4 md:p-6">
+                  <div className="flex items-center gap-4 mb-4">
+                    <div className="w-12 h-12 bg-blue-100 rounded-2xl flex items-center justify-center text-blue-600">
+                      <ShieldCheck size={28} />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-900 leading-none mb-1">System Diagnostic</h2>
+                      <p className="text-sm text-slate-500 font-medium">Verify connection and database integrity</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-6">
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Connection Status</h3>
+                        <div className="space-y-3">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm font-bold text-slate-600">Supabase URL</span>
+                            <code className="text-xs font-mono bg-white px-2 py-1 rounded border border-slate-200">
+                              {(supabase as any).supabaseUrl?.replace(/https:\/\/([a-z0-9]+)\..*/, '$1.supabase.co')}
+                            </code>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm font-bold text-slate-600">Anon Key Loaded</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-black ${ (supabase as any).supabaseKey && (supabase as any).supabaseKey !== 'placeholder-key' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              { (supabase as any).supabaseKey && (supabase as any).supabaseKey !== 'placeholder-key' ? 'YES (Valid JWT)' : 'NO (Placeholder)'}
+                            </span>
+                          </div>
+                          <div className="pt-4">
+                             <button 
+                              onClick={async () => {
+                                try {
+                                  const { data, error } = await supabase.from('users').select('count', { count: 'exact', head: true });
+                                  if (error) throw error;
+                                  showToast(`Connection Test Successful! Found ${data} users.`, "success");
+                                } catch (e: any) {
+                                  console.error("Test error:", e);
+                                  showToast(`Connection Fail: ${e.message}`, "error");
+                                }
+                              }}
+                              className="w-full py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition-all"
+                             >
+                               Run Connection Test
+                             </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Database Integrity</h3>
+                        <div className="space-y-4">
+                          <button 
+                            onClick={async () => {
+                              try {
+                                showToast("Running repair...", "success");
+                                
+                                // 1. Check if global row exists
+                                const { data: existing, error: fetchError } = await supabase
+                                  .from('settings')
+                                  .select('*')
+                                  .eq('id', 'global')
+                                  .maybeSingle();
+
+                                if (fetchError) throw fetchError;
+
+                                if (!existing) {
+                                  // Only insert if missing
+                                  const { error: insertError } = await supabase.from('settings').insert({
+                                    id: 'global',
+                                    school_name: 'Winning Gate Christian Theological Seminary'
+                                  });
+                                  if (insertError) throw insertError;
+                                  showToast("Created missing settings record", "success");
+                                } else {
+                                  // If exists, just ensure the name is there if empty
+                                  if (!existing.school_name && !existing.schoolName) {
+                                    await supabase.from('settings').update({ 
+                                      school_name: 'Winning Gate Christian Theological Seminary' 
+                                    }).eq('id', 'global');
+                                  }
+                                  showToast("Settings record verified", "success");
+                                }
+
+                                // 2. Test fetching all collections
+                                const counts: any = {};
+                                const tables = ['users', 'gallery', 'courses', 'departments', 'payments'];
+                                for (const table of tables) {
+                                  const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true });
+                                  counts[table] = error ? 'Error' : count;
+                                }
+
+                                alert(`Database Integrity Check Complete.\n\nSummary:\n- Settings (global): ${existing ? 'Verified' : 'Created'}\n${tables.map(t => `- ${t}: ${counts[t]} items`).join('\n')}\n\nRunning advanced sync...`);
+                                
+                                // Advanced fix: Sync specific rows to global row
+                                const { data: anthemRow } = await supabase.from('settings').select('value').eq('id', 'anthem').maybeSingle();
+                                if (anthemRow?.value) {
+                                  const anthemData = typeof anthemRow.value === 'string' ? JSON.parse(anthemRow.value) : anthemRow.value;
+                                  if (anthemData.url) {
+                                    await supabase.from('settings').update({ 
+                                      anthem_url: anthemData.url,
+                                      anthem_title: anthemData.title || 'School Anthem'
+                                    }).eq('id', 'global');
+                                  }
+                                }
+
+                                const { data: aboutRow } = await supabase.from('settings').select('value').eq('id', 'about').maybeSingle();
+                                if (aboutRow?.value) {
+                                  const aboutData = typeof aboutRow.value === 'string' ? JSON.parse(aboutRow.value) : aboutRow.value;
+                                  if (aboutData.url) {
+                                    await supabase.from('settings').update({ 
+                                      about_image_url: aboutData.url
+                                    }).eq('id', 'global');
+                                  }
+                                }
+
+                                await refreshSettings();
+                                alert("Sync Complete: Anthem and About settings have been synchronized to the global row.");
+                              } catch (e: any) {
+                                console.error("Repair error:", e);
+                                alert(`Check Failed: ${e.message}\n\nCheck if you have run the SQL in SCHEMA.md in your Supabase SQL Editor.`);
+                              }
+                            }}
+                            className="w-full py-3 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                          >
+                            <ShieldCheck size={16} /> Verify & Fix Database Integrity
+                          </button>
+                          <p className="text-[10px] text-slate-500 leading-relaxed italic">
+                            This will ensure the 'global' settings row exists. Use this if your logo/hero background are not showing despite being uploaded.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Raw Settings Inspector</h3>
+                        <div className="space-y-4">
+                           <button 
+                            onClick={async () => {
+                              const { data } = await supabase.from('settings').select('*');
+                              console.log('Raw Settings:', data);
+                              alert('Check browser console (F12) for RAW database dump. \n\nFound ' + (data?.length || 0) + ' rows in settings.');
+                            }}
+                            className="text-[10px] font-bold text-blue-600 hover:underline"
+                           >
+                              [Debug] Log Raw Settings to Console
+                           </button>
+                          <div className="bg-white p-3 rounded border border-slate-200 overflow-hidden">
+                              <p className="text-[10px] font-black text-slate-400 mb-2 uppercase">Core System Fields</p>
+                              <div className="space-y-1">
+                                {[
+                                  { label: 'Logo', key: 'logoUrl' },
+                                  { label: 'Hero BG', key: 'heroBgUrl' },
+                                  { label: 'Hero Banners', key: 'heroBanners' },
+                                  { label: 'Anthem', key: 'anthemUrl' },
+                                  { label: 'Admission Flyer', key: 'admissionFlyerUrl' }
+                                ].map(field => (
+                                  <div key={field.key} className="flex justify-between text-[10px]">
+                                    <span className="font-mono text-slate-500">{field.label}:</span>
+                                    <span className="font-bold">{(settings as any)[field.key] ? '✅ SET' : '❌ EMPTY'}</span>
+                                  </div>
+                                ))}
+                              </div>
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 italic">OTP & Student Verification Diagnostics</h3>
+                        <div className="space-y-4">
+                          <p className="text-[10px] text-slate-500">Test the OTP delivery system (Email/Server). Note: Codes are logged to the dev server console if SMTP is not set.</p>
+                          <div className="grid grid-cols-1 gap-2">
+                             <button 
+                              onClick={async () => {
+                                const email = prompt("Enter student email to test CLASS OTP:");
+                                if (!email) return;
+                                try {
+                                  const resp = await fetch('/api/send-class-otp', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ email, studentName: 'Admin Tester', regNumber: 'ADMIN-TEST-123' })
+                                  });
+                                  const data = await resp.json();
+                                  alert(`Result: ${data.message || data.error}\n\nCheck browser console for details.`);
+                                  console.log('OTP Test Result:', data);
+                                } catch (e: any) {
+                                  alert(`Error: ${e.message}`);
+                                }
+                              }}
+                              className="w-full py-2 bg-yellow-600 text-white text-[10px] font-bold rounded-lg hover:bg-yellow-700 transition-all flex items-center justify-center gap-2"
+                            >
+                               <Video size={14} /> Send Test Class OTP
+                             </button>
+                             <button 
+                              onClick={async () => {
+                                const email = prompt("Enter student email to test DOWNLOAD OTP:");
+                                if (!email) return;
+                                try {
+                                  const resp = await fetch('/api/send-download-otp', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ email, studentName: 'Admin Tester', certificateName: 'Diagnostic Sample' })
+                                  });
+                                  const data = await resp.json();
+                                  alert(`Result: ${data.message || data.error}\n\nCheck browser console for details.`);
+                                  console.log('OTP Test Result:', data);
+                                } catch (e: any) {
+                                  alert(`Error: ${e.message}`);
+                                }
+                              }}
+                              className="w-full py-2 bg-slate-900 text-white text-[10px] font-bold rounded-lg hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+                            >
+                               <Award size={14} /> Send Test Student OTP
+                             </button>
+                          </div>
+                          <div className="bg-white p-3 rounded border border-yellow-100">
+                             <p className="text-[10px] font-black text-yellow-600 uppercase mb-1">Troubleshooting OTP</p>
+                             <ul className="text-[9px] text-slate-500 list-disc ml-3 space-y-1">
+                                <li>Ensure <b>SMTP_PASS</b> is a 16-character Gmail App Password.</li>
+                                <li>Check if student email exists in <b>users</b> table.</li>
+                                <li>OTP Map resets on server restart (Standard behavior for dev).</li>
+                             </ul>
+                          </div>
+                        </div>
+                      </div>
+
+                    <div className="bg-slate-900 rounded-2xl p-6 text-white h-fit shadow-xl">
+                      <h3 className="text-xs font-black text-yellow-500 uppercase tracking-widest mb-4">Common Issues & Fixes</h3>
+                      <div className="space-y-4 text-xs">
+                        <div className="border-l-2 border-yellow-500/30 pl-4 py-1">
+                          <p className="font-bold mb-1">Images not showing?</p>
+                          <p className="text-slate-400">Ensure your <b>'image'</b> storage bucket is <b>Public</b> and the <b>'gallery'</b> table has <b>Public SELECT</b> access in Supabase.</p>
+                        </div>
+                        <div className="border-l-2 border-yellow-500/30 pl-4 py-1">
+                          <p className="font-bold mb-1">'Table not found' errors?</p>
+                          <p className="text-slate-400">Copy the SQL from <b>SCHEMA.md</b> in the code editor, go to Supabase Dashboard {"->"} SQL Editor, and <b>Run</b> it.</p>
+                        </div>
+                        <div className="border-l-2 border-yellow-500/30 pl-4 py-1">
+                          <p className="font-bold mb-1">'Failed to fetch' on upload?</p>
+                          <p className="text-slate-400">This usually means your Supabase URL/Key are incorrect, or your browser is blocking the request. Disable ad-blockers for this site.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'finance' && (
               <div className="space-y-6">
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
@@ -1070,7 +1634,7 @@ export default function AdminDashboard() {
                       <div className="bg-green-50 px-4 py-2 rounded-xl border border-green-100">
                         <p className="text-[10px] font-bold text-green-600 uppercase tracking-wider">Total Revenue</p>
                         <p className="text-lg font-black text-green-700">
-                          {settings.fees.currency === 'USD' ? '$' : '₦'}
+                          {settings.fees?.currency === 'USD' ? '$' : '₦'}
                           {payments.reduce((acc, p) => acc + (p.amount || 0), 0).toLocaleString()}
                         </p>
                       </div>
@@ -1091,7 +1655,7 @@ export default function AdminDashboard() {
                         <ShieldCheck size={16} className="text-blue-500" />
                       </div>
                       <p className="text-xl font-bold text-slate-900">
-                        {settings.fees.currency === 'USD' ? '$' : '₦'}
+                        {settings.fees?.currency === 'USD' ? '$' : '₦'}
                         {payments.filter(p => p.type === 'registration_fee').reduce((acc, p) => acc + (p.amount || 0), 0).toLocaleString()}
                       </p>
                     </div>
@@ -1101,7 +1665,7 @@ export default function AdminDashboard() {
                         <GraduationCap size={16} className="text-yellow-600" />
                       </div>
                       <p className="text-xl font-bold text-slate-900">
-                        {settings.fees.currency === 'USD' ? '$' : '₦'}
+                        {settings.fees?.currency === 'USD' ? '$' : '₦'}
                         {payments.filter(p => p.type === 'tuition_fee').reduce((acc, p) => acc + (p.amount || 0), 0).toLocaleString()}
                       </p>
                     </div>
@@ -1111,7 +1675,7 @@ export default function AdminDashboard() {
                         <Award size={16} className="text-purple-500" />
                       </div>
                       <p className="text-xl font-bold text-slate-900">
-                        {settings.fees.currency === 'USD' ? '$' : '₦'}
+                        {settings.fees?.currency === 'USD' ? '$' : '₦'}
                         {payments.filter(p => p.certificate_id).reduce((acc, p) => acc + (p.amount || 0), 0).toLocaleString()}
                       </p>
                     </div>
@@ -1468,8 +2032,9 @@ export default function AdminDashboard() {
                                   }
                                   console.error("SMTP Test Details:", result);
                                 }
-                              } catch (err) {
-                                showToast("Request failed", "error");
+                              } catch (err: any) {
+                                showToast("SMTP Verification check could not be completed.", "error");
+                                console.warn("SMTP Verification Request failed:", err.message);
                               }
                             }}
                             className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-700 transition-colors shadow-sm"
@@ -1966,7 +2531,7 @@ export default function AdminDashboard() {
                       <div className="flex justify-between items-center bg-blue-50 border border-blue-100 p-3 rounded-lg">
                         <div className="flex items-center gap-2 text-blue-800">
                           <ShieldCheck size={16} />
-                          <p className="text-xs font-bold">Storage Status: Bucket 'App_files' {import.meta.env.VITE_SUPABASE_URL?.includes('placeholder') ? 'is NOT configured' : 'is configured'}</p>
+                          <p className="text-xs font-bold">Storage Status: Bucket 'image' {import.meta.env.VITE_SUPABASE_URL?.includes('placeholder') ? 'is NOT configured' : 'is configured'}</p>
                         </div>
                         <p className="text-[10px] text-blue-600 bg-white px-2 py-0.5 rounded border border-blue-100 italic">Fallback: Base64 enabled</p>
                       </div>
@@ -1998,35 +2563,30 @@ export default function AdminDashboard() {
 
                         for (let i = 0; i < files.length; i++) {
                           const file = files[i];
+                          if (file.size > 10 * 1024 * 1024) {
+                            showToast(`File ${file.name} is too large (>10MB). Skipping.`, "error");
+                            continue;
+                          }
+                          const processedFile = await compressImage(file);
                           let finalUrl = '';
 
-                          if (import.meta.env.VITE_SUPABASE_URL?.includes('placeholder') || !import.meta.env.VITE_SUPABASE_URL) {
-                            console.warn("Supabase not configured. Falling back to Base64.");
-                            finalUrl = await fallbackToBase64(file);
-                          } else {
-                            // Sanitize filename to prevent character issues
-                            const safeName = file.name.replace(/[^a-z0-9.]/gi, '_').toLowerCase();
-                            const filePath = `gallery/${year}/${Date.now()}_${safeName}`;
-                            const { error: uploadError } = await supabase.storage
-                              .from('App_files')
-                              .upload(filePath, file);
-                              
-                             if (uploadError) {
-                              console.error("Supabase Storage Error Details:", {
-                                message: uploadError.message,
-                                status: (uploadError as any).status,
-                                name: uploadError.name,
-                                bucket: 'App_files',
-                                path: filePath
-                              });
-                              console.warn("Storage upload failed, attempting Base64 fallback...");
-                              finalUrl = await fallbackToBase64(file);
+                          if (false) { // Skip supabase
+                             // This won't run, left structurally same
+                          }
+                          try {
+                            const formData = new FormData();
+                            formData.append("file", processedFile);
+                            formData.append("folder", `gallery/${year}`);
+                            const res = await fetch("/api/upload", { method: "POST", body: formData });
+                            const data = await res.json();
+                            if (data.url) {
+                              finalUrl = data.url;
                             } else {
-                              const { data: { publicUrl } } = supabase.storage
-                                .from('App_files')
-                                .getPublicUrl(filePath);
-                              finalUrl = publicUrl;
+                              throw new Error(data.error || "Upload failed");
                             }
+                          } catch (err) {
+                            console.warn("Cloudinary upload failed, attempting Base64 fallback...", err);
+                            finalUrl = await fallbackToBase64(processedFile);
                           }
 
                           if (!finalUrl) throw new Error("Failed to generate file URL.");
@@ -2186,12 +2746,12 @@ export default function AdminDashboard() {
                                       </div>
                                       <button 
                                         onClick={async () => {
-                                          if (confirm("Permanently delete this image?")) {
-                                            const { error } = await supabase.from('gallery').delete().eq('id', img.id);
-                                            if (!error) {
-                                              showToast("Image deleted");
-                                              fetchGallery();
-                                            }
+                                          const { error } = await supabase.from('gallery').delete().eq('id', img.id);
+                                          if (!error) {
+                                            showToast("Image deleted");
+                                            fetchGallery();
+                                          } else {
+                                            showToast("Failed to delete image", "error");
                                           }
                                         }}
                                         className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
@@ -2240,12 +2800,12 @@ export default function AdminDashboard() {
                                       </div>
                                       <button 
                                         onClick={async () => {
-                                          if (confirm("Permanently delete this video?")) {
-                                            const { error } = await supabase.from('gallery_videos').delete().eq('id', vid.id);
-                                            if (!error) {
-                                              showToast("Video deleted");
-                                              fetchGallery();
-                                            }
+                                          const { error } = await supabase.from('gallery_videos').delete().eq('id', vid.id);
+                                          if (!error) {
+                                            showToast("Video deleted");
+                                            fetchGallery();
+                                          } else {
+                                            showToast("Failed to delete video", "error");
                                           }
                                         }}
                                         className="p-1.5 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
@@ -2273,7 +2833,111 @@ export default function AdminDashboard() {
             )}
 
             {activeTab === 'messages' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+              <div className="space-y-6">
+                {/* Send Bulk Announcement Card */}
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                  <h2 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <Megaphone size={20} className="text-yellow-600" />
+                    Send Bulk Announcement
+                  </h2>
+                  <p className="text-sm text-slate-500 mb-6 italic">Send an email notification to all registered students, teachers, or everyone.</p>
+                  
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Target Audience</label>
+                        <select 
+                          value={bulkEmailMessage.target}
+                          onChange={(e) => setBulkEmailMessage(prev => ({ ...prev, target: e.target.value as any }))}
+                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 outline-none focus:ring-2 focus:ring-yellow-600"
+                        >
+                          <option value="all">Everyone (Students & Teachers)</option>
+                          <option value="students">Students Only</option>
+                          <option value="teachers">Teachers Only</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Email Subject</label>
+                        <input 
+                          type="text" 
+                          placeholder="Announcing New Semester Courses..."
+                          value={bulkEmailMessage.subject}
+                          onChange={(e) => setBulkEmailMessage(prev => ({ ...prev, subject: e.target.value }))}
+                          className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-yellow-600"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Message Body</label>
+                      <textarea 
+                        rows={4}
+                        placeholder="Type your message here..."
+                        value={bulkEmailMessage.body}
+                        onChange={(e) => setBulkEmailMessage(prev => ({ ...prev, body: e.target.value }))}
+                        className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-yellow-600 min-h-[120px]"
+                      ></textarea>
+                    </div>
+                    <div className="flex justify-end">
+                      <button 
+                        disabled={isSendingBulk || !bulkEmailMessage.subject || !bulkEmailMessage.body}
+                        onClick={async () => {
+                          setIsSendingBulk(true);
+                          try {
+                            const recipients: string[] = [];
+                            if (bulkEmailMessage.target === 'all' || bulkEmailMessage.target === 'students') {
+                              students.forEach(s => { if (s.email) recipients.push(s.email); });
+                            }
+                            if (bulkEmailMessage.target === 'all' || bulkEmailMessage.target === 'teachers') {
+                              teachers.forEach(t => { if (t.email) recipients.push(t.email); });
+                            }
+
+                            if (recipients.length === 0) {
+                              showToast("No recipients found for the selected target.", "error");
+                              return;
+                            }
+
+                            const response = await fetch('/api/send-bulk-email', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                emails: recipients,
+                                subject: bulkEmailMessage.subject,
+                                body: bulkEmailMessage.body
+                              })
+                            });
+
+                            const result = await response.json();
+                            if (result.success) {
+                              showToast(result.message, "success");
+                              setBulkEmailMessage({ subject: '', body: '', target: 'all' });
+                            } else {
+                              showToast(result.error || "Failed to send announcements", "error");
+                            }
+                          } catch (err: any) {
+                            showToast(err.message, "error");
+                          } finally {
+                            setIsSendingBulk(false);
+                          }
+                        }}
+                        className={`bg-yellow-600 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-yellow-700 transition-all shadow-md ${isSendingBulk ? 'opacity-50' : ''}`}
+                      >
+                        {isSendingBulk ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Send size={18} />
+                            Send Announcement
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-xl font-bold text-slate-900">Contact Messages</h2>
                   {messages.length > 0 && (
@@ -2329,18 +2993,19 @@ export default function AdminDashboard() {
                         )}
                         <button
                           onClick={() => {
-                            // Extract email from "Email: user@example.com"
-                            const emailMatch = msg.body.match(/Email:\s*([^\s]+)/);
+                            // Robust email extraction - find any valid email in the body
+                            const emailPattern = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/;
+                            const emailMatch = msg.body.match(emailPattern);
                             const email = emailMatch ? emailMatch[1] : '';
                             if (email) {
                               window.location.href = `mailto:${email}?subject=Re: ${encodeURIComponent(msg.subject)}`;
                             } else {
-                              showToast("Could not find sender email in the message.", "error");
+                              showToast("Could not find a valid email address in the message text.", "error");
                             }
                           }}
-                          className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded hover:bg-blue-100 transition-colors"
+                          className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded hover:bg-blue-100 transition-colors flex items-center gap-1"
                         >
-                          Reply
+                          <Mail size={12} /> Reply
                         </button>
                         <button 
                           onClick={() => {
@@ -2368,51 +3033,81 @@ export default function AdminDashboard() {
                   )}
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
             {activeTab === 'blog' && (
               <AdminBlog showToast={showToast} />
             )}
 
             {activeTab === 'settings' && (
-              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-                <h2 className="text-xl font-bold text-slate-900 mb-6">Global Settings</h2>
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 md:p-6">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                  <div>
+                    <h2 className="text-xl md:text-2xl font-display font-black text-slate-900 tracking-tight">System Settings</h2>
+                    <p className="text-slate-500 text-sm">Configure school identity, admission portal, and external integrations.</p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                    <button 
+                      onClick={() => setSettingsTab('identity')}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${settingsTab === 'identity' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      Identity & Admission
+                    </button>
+                    <button 
+                      onClick={() => setSettingsTab('integrations')}
+                      className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${settingsTab === 'integrations' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      Integrations & API Keys
+                    </button>
+                  </div>
+                </div>
                 
                 <div className="space-y-8">
-                  {/* Portal Status Section */}
-                  <div className="p-6 border-2 border-yellow-100 rounded-xl bg-yellow-50/50">
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                      <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${settings.isAdmissionOpen ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                          <div className={`w-3 h-3 rounded-full ${settings.isAdmissionOpen ? 'bg-green-600' : 'bg-red-600'} animate-pulse`} />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-bold text-slate-900">Admission Portal Control</h3>
-                          <p className="text-sm text-slate-500">Currently: <span className={`font-bold ${settings.isAdmissionOpen ? 'text-green-600' : 'text-red-600'}`}>{settings.isAdmissionOpen ? 'OPEN' : 'CLOSED'}</span></p>
+                  {settingsTab === 'identity' ? (
+                    <div className="space-y-8">
+                      {/* Portal Status Section */}
+                      <div className="p-6 border-2 border-yellow-100 rounded-xl bg-yellow-50/50">
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${settings.isAdmissionOpen ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                              <div className={`w-3 h-3 rounded-full ${settings.isAdmissionOpen ? 'bg-green-600' : 'bg-red-600'} animate-pulse`} />
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-bold text-slate-900">Admission Portal Control</h3>
+                              <p className="text-sm text-slate-500">Currently: <span className={`font-bold ${settings.isAdmissionOpen ? 'text-green-600' : 'text-red-600'}`}>{settings.isAdmissionOpen ? 'OPEN' : 'CLOSED'}</span></p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={async () => {
+                              const newStatus = !settings.isAdmissionOpen;
+                              try {
+                                const { error } = await supabase.from('settings')
+                                  .update({ is_admission_open: newStatus })
+                                  .eq('id', 'global');
+                                  
+                                if (error) {
+                                  await supabase.from('settings').upsert({ id: 'global', is_admission_open: newStatus });
+                                }
+                                
+                                setSettings(prev => ({ ...prev, isAdmissionOpen: newStatus }));
+                                await refreshSettings();
+                                showToast(newStatus ? "Admission Portal Opened" : "Admission Portal Closed", "success");
+                              } catch (error) {
+                                showToast("Failed to update status", "error");
+                              }
+                            }}
+                            className={`px-8 py-3 rounded-xl font-bold text-white transition-all shadow-lg ${settings.isAdmissionOpen ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-green-600 hover:bg-green-700 shadow-green-200'}`}
+                          >
+                            {settings.isAdmissionOpen ? 'Close Portal Immediately' : 'Open Admission Portal'}
+                          </button>
                         </div>
                       </div>
-                      <button 
-                        onClick={async () => {
-                          const newStatus = !settings.isAdmissionOpen;
-                          try {
-                            await supabase.from('settings').upsert({ id: 'global', is_admission_open: newStatus });
-                            setSettings(prev => ({ ...prev, isAdmissionOpen: newStatus }));
-                            await refreshSettings();
-                            showToast(newStatus ? "Admission Portal Opened" : "Admission Portal Closed", "success");
-                          } catch (error) {
-                            showToast("Failed to update status", "error");
-                          }
-                        }}
-                        className={`px-8 py-3 rounded-xl font-bold text-white transition-all shadow-lg ${settings.isAdmissionOpen ? 'bg-red-600 hover:bg-red-700 shadow-red-200' : 'bg-green-600 hover:bg-green-700 shadow-green-200'}`}
-                      >
-                        {settings.isAdmissionOpen ? 'Close Portal Immediately' : 'Open Admission Portal'}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="p-6 border border-slate-100 rounded-xl bg-slate-50">
-                    <h3 className="font-bold text-slate-900 mb-4">Seminary Logo</h3>
-                    <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
-                      <div className="w-24 h-24 shrink-0 bg-white border border-slate-200 rounded-lg flex items-center justify-center overflow-hidden">
+
+                      <div className="p-6 border border-slate-100 rounded-xl bg-slate-50">
+                        <h3 className="font-bold text-slate-900 mb-4">Seminary Logo</h3>
+                        <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
+                          <div className="w-24 h-24 shrink-0 bg-white border border-slate-200 rounded-lg flex items-center justify-center overflow-hidden">
                         {settings.logoUrl ? (
                           <img 
                             src={formatImageUrl(settings.logoUrl)} 
@@ -2527,7 +3222,82 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="p-6 border border-slate-100 rounded-xl bg-slate-50">
-                    <h3 className="font-bold text-slate-900 mb-4">Hero Background Image</h3>
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="font-bold text-slate-900">Admission Advert Flyers (Slideshow)</h3>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{settings.heroBanners?.length || 0}/4 Slots Used</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-6 italic">Upload up to 4 advert flyer images to be displayed as a cinematic slideshow in the admission advert section.</p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                      {[0, 1, 2, 3].map((idx) => (
+                        <div key={idx} className="relative group">
+                          <div className="aspect-[3/4] w-full bg-white border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center shadow-inner">
+                            {settings.heroBanners?.[idx] ? (
+                              <>
+                                <img 
+                                  src={formatImageUrl(settings.heroBanners[idx])} 
+                                  alt={`Banner ${idx + 1}`} 
+                                  className="w-full h-full object-cover"
+                                  referrerPolicy="no-referrer"
+                                />
+                                <button 
+                                  onClick={() => removeBanner(idx)}
+                                  className="absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+                                  title="Remove Banner"
+                                >
+                                  <X size={14} />
+                                </button>
+                                <div className="absolute bottom-0 inset-x-0 bg-slate-900/60 backdrop-blur-sm p-1.5 text-[8px] font-bold text-white text-center">
+                                  SLOT {idx + 1}
+                                </div>
+                              </>
+                            ) : (
+                              <div className="text-center p-4">
+                                <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                                  <ImageIcon size={18} className="text-slate-400" />
+                                </div>
+                                <p className="text-[10px] font-bold text-slate-400">EMPTY SLOT {idx + 1}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex flex-col items-center gap-4 mt-6">
+                      <label className={`cursor-pointer inline-flex bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-xl font-bold transition-all items-center gap-3 shadow-lg shadow-slate-900/20 ${uploadingType === 'heroBanners' ? 'opacity-50 cursor-wait' : ''}`}>
+                        <Upload size={20} /> {uploadingType === 'heroBanners' ? 'Uploading Banners...' : 'Upload New Banners'}
+                        <input 
+                          type="file" 
+                          className="hidden" 
+                          accept="image/*" 
+                          multiple 
+                          onChange={handleBannersUpload} 
+                          disabled={uploadingType === 'heroBanners' || (settings.heroBanners?.length || 0) >= 4} 
+                        />
+                      </label>
+                      <div className="flex w-full max-w-md items-center gap-2">
+                        <input 
+                          type="text" 
+                          placeholder="Or paste an image URL here..." 
+                          className="flex-grow min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                          value={newBannerUrl}
+                          onChange={(e) => setNewBannerUrl(e.target.value)}
+                          disabled={(settings.heroBanners?.length || 0) >= 4}
+                        />
+                        <button 
+                          onClick={handleAddBannerUrl}
+                          disabled={(settings.heroBanners?.length || 0) >= 4 || !newBannerUrl.trim()}
+                          className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors whitespace-nowrap disabled:opacity-50"
+                        >
+                          Add URL
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-6 border border-slate-100 rounded-xl bg-slate-50">
+                    <h3 className="font-bold text-slate-900 mb-4">Hero Background Image (Fallback)</h3>
                     <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
                       <div className="w-48 h-24 shrink-0 bg-white border border-slate-200 rounded-lg flex items-center justify-center overflow-hidden">
                         {settings.heroBgUrl ? (
@@ -2584,6 +3354,12 @@ export default function AdminDashboard() {
                               try {
                                 const { error } = await supabase.from('settings').upsert({ id: 'anthem', value: JSON.stringify({ url: settings.anthemUrl, title: settings.anthemTitle }) });
                                 if (error) throw error;
+                                
+                                // Also update global row
+                                await supabase.from('settings').update({
+                                  anthem_title: settings.anthemTitle
+                                }).eq('id', 'global');
+                                
                                 await refreshSettings();
                                 showToast("Anthem title saved!");
                               } catch (e: any) {
@@ -2630,95 +3406,6 @@ export default function AdminDashboard() {
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-
-                  <div className="p-6 border border-slate-100 rounded-xl bg-slate-50">
-                    <h3 className="font-bold text-slate-900 mb-4">Payment Settings</h3>
-                    <div className="grid grid-cols-1 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Flutterwave Public Key</label>
-                        <input 
-                          type="text" 
-                          className="w-full min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
-                          value={settings.flutterwavePublicKey || ''}
-                          onChange={(e) => setSettings(prev => ({ ...prev, flutterwavePublicKey: e.target.value }))}
-                          placeholder="FLWPUBK_TEST-..."
-                        />
-                      </div>
-                    </div>
-                    <div className="mt-6 flex justify-end">
-                      <button 
-                        id="savePaymentSettingsBtn"
-                        onClick={async () => {
-                          const btn = document.getElementById('savePaymentSettingsBtn');
-                          if (btn) {
-                            btn.innerText = 'Saving...';
-                            btn.classList.add('opacity-50', 'cursor-not-allowed');
-                          }
-                          try {
-                            await supabase.from('settings').upsert({ id: 'global', flutterwave_public_key: settings.flutterwavePublicKey });
-                            if (btn) {
-                              btn.innerText = 'Saved Successfully!';
-                              btn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-yellow-600', 'hover:bg-yellow-700');
-                              btn.classList.add('bg-green-600', 'hover:bg-green-700');
-                              setTimeout(() => {
-                                btn.innerText = 'Save Payment Settings';
-                                btn.classList.remove('bg-green-600', 'hover:bg-green-700');
-                                btn.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
-                              }, 3000);
-                            }
-                          } catch (error) {
-                            console.error("Error saving payment settings:", error);
-                            if (btn) {
-                              btn.innerText = 'Failed to Save';
-                              btn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-yellow-600', 'hover:bg-yellow-700');
-                              btn.classList.add('bg-red-600', 'hover:bg-red-700');
-                              setTimeout(() => {
-                                btn.innerText = 'Save Payment Settings';
-                                btn.classList.remove('bg-red-600', 'hover:bg-red-700');
-                                btn.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
-                              }, 3000);
-                            }
-                          }
-                        }}
-                        className="bg-yellow-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-yellow-700 transition-colors duration-300"
-                      >
-                        Save Payment Settings
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="p-6 border border-red-100 rounded-xl bg-red-50/30">
-                    <h3 className="font-bold text-red-900 mb-4 flex items-center gap-2">
-                      <ShieldCheck size={18} /> Password & Security
-                    </h3>
-                    <div className="flex flex-col md:flex-row items-end gap-4">
-                      <div className="flex-grow space-y-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Change Admin Password</label>
-                        <input 
-                          type="password" 
-                          placeholder="Enter new secure password..." 
-                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-red-600 outline-none"
-                          id="new-admin-password"
-                        />
-                      </div>
-                      <button 
-                        onClick={async () => {
-                          const passwordInput = document.getElementById('new-admin-password') as HTMLInputElement;
-                          const password = passwordInput?.value;
-                          if (!password || password.length < 6) return showToast('Password must be at least 6 characters', 'error');
-                          const { error } = await supabase.auth.updateUser({ password });
-                          if (error) showToast(error.message, 'error');
-                          else {
-                            showToast('Admin password updated successfully!');
-                            if (passwordInput) passwordInput.value = '';
-                          }
-                        }}
-                        className="bg-red-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-red-700 transition-colors shadow-sm"
-                      >
-                        Update Password
-                      </button>
                     </div>
                   </div>
 
@@ -2775,7 +3462,8 @@ export default function AdminDashboard() {
                             btn.classList.add('opacity-50', 'cursor-not-allowed');
                           }
                           try {
-                            await supabase.from('settings').upsert({ id: 'global', important_dates: settings.importantDates });
+                            const { error } = await supabase.from('settings').update({ important_dates: settings.importantDates }).eq('id', 'global');
+                            if (error) await supabase.from('settings').upsert({ id: 'global', important_dates: settings.importantDates });
                             if (btn) {
                               btn.innerText = 'Saved Successfully!';
                               btn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-yellow-600', 'hover:bg-yellow-700');
@@ -2808,13 +3496,108 @@ export default function AdminDashboard() {
                   </div>
 
                   <div className="p-6 border border-slate-100 rounded-xl bg-slate-50">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="font-bold text-slate-900">Student Testimonials</h3>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{settings.testimonials?.length || 0} Added</span>
+                    </div>
+                    <p className="text-xs text-slate-500 mb-6 italic">Manage student testimonials displayed on the home page. If you leave this empty, the default testimonials will be shown.</p>
+
+                    <div className="space-y-6 mb-8">
+                      {settings.testimonials?.map((t, idx) => (
+                        <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 relative group" id={`testimonial-${idx}`}>
+                          <button 
+                            onClick={() => handleRemoveTestimonial(idx)}
+                            className="absolute top-2 right-2 p-1.5 bg-red-50 text-red-600 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Remove Testimonial"
+                          >
+                            <X size={14} />
+                          </button>
+                          <div className="flex gap-4">
+                            <div className="w-16 h-16 shrink-0 bg-slate-100 rounded-lg overflow-hidden border border-slate-100">
+                              {t.img ? (
+                                <img src={formatImageUrl(t.img)} alt="Author" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center"><UserIcon size={24} className="text-slate-300" /></div>
+                              )}
+                            </div>
+                            <div className="flex-grow min-w-0">
+                              <h5 className="font-bold text-slate-900 text-sm truncate">{t.author}</h5>
+                              <p className="text-yellow-600 text-[10px] font-bold uppercase tracking-wider mb-2">{t.role}</p>
+                              <p className="text-slate-600 text-xs italic line-clamp-2">"{t.quote}"</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+                      <h4 className="text-sm font-bold text-slate-900 mb-4">Add New Testimonial</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div className="flex flex-col gap-4">
+                          <div className="flex items-center gap-4">
+                            <div className="w-16 h-16 shrink-0 bg-slate-50 border border-dashed border-slate-300 rounded-lg flex items-center justify-center overflow-hidden">
+                              {newTestimonial.img ? (
+                                <img src={formatImageUrl(newTestimonial.img)} alt="Preview" className="w-full h-full object-cover" />
+                              ) : (
+                                <ImageIcon size={20} className="text-slate-300" />
+                              )}
+                            </div>
+                            <div>
+                              <label className={`cursor-pointer inline-flex bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold transition-all items-center gap-2 ${uploadingType === 'testimonialImg' ? 'opacity-50 cursor-wait' : ''}`}>
+                                <Upload size={14} /> {uploadingType === 'testimonialImg' ? 'Uploading...' : 'Upload Picture'}
+                                <input type="file" className="hidden" accept="image/*" onChange={handleTestimonialImgUpload} disabled={uploadingType === 'testimonialImg'} />
+                              </label>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Author Name</label>
+                            <input 
+                              type="text" 
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                              value={newTestimonial.author}
+                              onChange={(e) => setNewTestimonial(prev => ({ ...prev, author: e.target.value }))}
+                              placeholder="e.g. Pastor John Doe"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Role / Class</label>
+                            <input 
+                              type="text" 
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                              value={newTestimonial.role}
+                              onChange={(e) => setNewTestimonial(prev => ({ ...prev, role: e.target.value }))}
+                              placeholder="e.g. Alumnus, Class of 2023"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-col h-full">
+                          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Testimonial Quote</label>
+                          <textarea 
+                            className="flex-grow w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none resize-none"
+                            value={newTestimonial.quote}
+                            onChange={(e) => setNewTestimonial(prev => ({ ...prev, quote: e.target.value }))}
+                            placeholder="Write the student's impact story here..."
+                            rows={5}
+                          />
+                        </div>
+                      </div>
+                      <button 
+                        onClick={handleAddTestimonial}
+                        className="w-full bg-slate-900 text-white py-3 rounded-lg font-bold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-900/10"
+                      >
+                        Add Testimonial
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-6 border border-slate-100 rounded-xl bg-slate-50">
                     <div className="flex justify-between items-center mb-6">
-                      <h3 className="font-bold text-slate-900">Fee Settings ({settings.fees.currency || 'NGN'})</h3>
+                      <h3 className="font-bold text-slate-900">Fee Settings ({settings.fees?.currency || 'NGN'})</h3>
                       <div className="flex items-center gap-2">
                         <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Transaction Currency:</label>
                         <select 
                           className="px-3 py-1 bg-white border border-slate-200 rounded text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
-                          value={settings.fees.currency || 'NGN'}
+                          value={settings.fees?.currency || 'NGN'}
                           onChange={(e) => setSettings(prev => ({ ...prev, fees: { ...prev.fees, currency: e.target.value } }))}
                         >
                           <option value="NGN">NGN (Naira)</option>
@@ -2828,7 +3611,7 @@ export default function AdminDashboard() {
                         <input 
                           type="number" 
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
-                          value={settings.fees.registration}
+                          value={settings.fees?.registration || 0}
                           onChange={(e) => setSettings(prev => ({ ...prev, fees: { ...prev.fees, registration: Number(e.target.value) } }))}
                         />
                       </div>
@@ -2837,7 +3620,7 @@ export default function AdminDashboard() {
                         <input 
                           type="number" 
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
-                          value={settings.fees.tuition.diploma}
+                          value={settings.fees?.tuition?.diploma || 0}
                           onChange={(e) => setSettings(prev => ({ ...prev, fees: { ...prev.fees, tuition: { ...prev.fees.tuition, diploma: Number(e.target.value) } } }))}
                         />
                       </div>
@@ -2846,7 +3629,7 @@ export default function AdminDashboard() {
                         <input 
                           type="number" 
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
-                          value={settings.fees.tuition.bachelor}
+                          value={settings.fees?.tuition?.bachelor || 0}
                           onChange={(e) => setSettings(prev => ({ ...prev, fees: { ...prev.fees, tuition: { ...prev.fees.tuition, bachelor: Number(e.target.value) } } }))}
                         />
                       </div>
@@ -2855,7 +3638,7 @@ export default function AdminDashboard() {
                         <input 
                           type="number" 
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
-                          value={settings.fees.tuition.master}
+                          value={settings.fees?.tuition?.master || 0}
                           onChange={(e) => setSettings(prev => ({ ...prev, fees: { ...prev.fees, tuition: { ...prev.fees.tuition, master: Number(e.target.value) } } }))}
                         />
                       </div>
@@ -2864,7 +3647,7 @@ export default function AdminDashboard() {
                         <input 
                           type="number" 
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
-                          value={settings.fees.tuition.doctorate}
+                          value={settings.fees?.tuition?.doctorate || 0}
                           onChange={(e) => setSettings(prev => ({ ...prev, fees: { ...prev.fees, tuition: { ...prev.fees.tuition, doctorate: Number(e.target.value) } } }))}
                         />
                       </div>
@@ -2878,6 +3661,322 @@ export default function AdminDashboard() {
                       </button>
                     </div>
                   </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-8">
+                      <div className="p-6 border border-slate-100 rounded-xl bg-slate-50">
+                        <h3 className="font-bold text-slate-900 mb-4">Integration & Function Keys</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Flutterwave Public Key</label>
+                        <input 
+                          type="password" 
+                          className="w-full min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                          value={settings.flutterwavePublicKey || ''}
+                          onChange={(e) => setSettings(prev => ({ ...prev, flutterwavePublicKey: e.target.value }))}
+                          placeholder="[Hidden for security - enter new key to replace]"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Used for student admission fee payments.</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Production Site URL</label>
+                        <input 
+                          type="text" 
+                          className="w-full min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                          value={settings.siteUrl || ''}
+                          onChange={(e) => setSettings(prev => ({ ...prev, siteUrl: e.target.value }))}
+                          placeholder="e.g. https://your-site.com"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Used for payment redirects and email links.</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Cloudinary URL / Connection String</label>
+                        <input 
+                          type="password" 
+                          className="w-full min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                          value={settings.cloudinaryUrl || ''}
+                          onChange={(e) => setSettings(prev => ({ ...prev, cloudinaryUrl: e.target.value }))}
+                          placeholder="[Hidden for security - enter new url to replace]"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Found in your Cloudinary API keys section (e.g. <code>cloudinary://...</code>).</p>
+                        <button 
+                          onClick={async () => {
+                            try {
+                              showToast("Testing Cloudinary...", "success");
+                              const resp = await fetch('/api/test-cloudinary');
+                              const data = await resp.json();
+                              if (data.success) {
+                                showToast("Cloudinary Connected!", "success");
+                                alert(`Cloudinary working perfectly!\nCloud: ${data.cloudName}`);
+                              } else {
+                                alert(`Cloudinary Test Failed: ${data.error}`);
+                              }
+                            } catch (e: any) {
+                              alert(`Test error: ${e.message}`);
+                            }
+                          }}
+                          className="mt-2 text-[10px] font-bold text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors flex items-center gap-1"
+                        >
+                          <Cloud size={12} /> Test Connection
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-8 border-t border-slate-200 pt-6">
+                      <h4 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+                        <Globe size={16} className="text-yellow-600" /> Email (SMTP) Configuration
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">SMTP Host</label>
+                          <input 
+                            type="text" 
+                            className="w-full min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                            value={settings.smtpHost || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, smtpHost: e.target.value }))}
+                            placeholder="e.g. smtp.gmail.com"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">SMTP Port</label>
+                          <input 
+                            type="text" 
+                            className="w-full min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                            value={settings.smtpPort || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, smtpPort: e.target.value }))}
+                            placeholder="e.g. 587 or 465"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">SMTP User (Email)</label>
+                          <input 
+                            type="text" 
+                            className="w-full min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                            value={settings.smtpUser || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, smtpUser: e.target.value }))}
+                            placeholder="your-email@gmail.com"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">SMTP Password / App Password</label>
+                          <input 
+                            type="password" 
+                            className="w-full min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                            value={settings.smtpPass || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, smtpPass: e.target.value }))}
+                            placeholder="[Hidden for security]"
+                          />
+                          <p className="text-xs text-slate-500 mt-1">For Gmail, use a 16-character App Password.</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">Sender Name</label>
+                          <input 
+                            type="text" 
+                            className="w-full min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                            value={settings.smtpSender || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, smtpSender: e.target.value }))}
+                            placeholder="e.g. Winning Gate Seminary"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">From Email Address</label>
+                          <input 
+                            type="text" 
+                            className="w-full min-w-0 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                            value={settings.smtpFrom || ''}
+                            onChange={(e) => setSettings(prev => ({ ...prev, smtpFrom: e.target.value }))}
+                            placeholder="e.g. info@winninggateseminary.com.ng"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Test Connection UI */}
+                      <div className="mt-8 pt-6 border-t border-slate-200">
+                        <div className="bg-yellow-50/30 p-4 rounded-lg border border-yellow-100">
+                          <h4 className="text-xs font-bold text-yellow-800 uppercase tracking-wider mb-3 flex items-center gap-2">
+                             Test SMTP Connection
+                          </h4>
+                          <div className="flex flex-col sm:flex-row gap-3">
+                            <div className="flex-1">
+                              <input 
+                                type="email" 
+                                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-yellow-600 bg-white"
+                                placeholder="Recipient email address (e.g. your own email)"
+                                value={testEmail}
+                                onChange={(e) => setTestEmail(e.target.value)}
+                              />
+                            </div>
+                            <button
+                              onClick={handleTestEmail}
+                              disabled={isTestingEmail}
+                              className={`px-4 py-2 bg-yellow-600 text-white text-sm font-bold rounded-lg hover:bg-yellow-700 transition-colors flex items-center gap-2 whitespace-nowrap shadow-sm ${isTestingEmail ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                              {isTestingEmail ? (
+                                <>
+                                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                  Sending...
+                                </>
+                              ) : (
+                                <>
+                                  <Mail size={16} />
+                                  Send Test Email
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-2 italic">
+                            Note: If you just updated settings, click <strong>Save Integration Keys</strong> below before testing.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-6 flex justify-end">
+                      <button 
+                        id="saveIntegrationSettingsBtn"
+                        onClick={async () => {
+                          const btn = document.getElementById('saveIntegrationSettingsBtn');
+                          if (btn) {
+                            btn.innerText = 'Saving...';
+                            btn.classList.add('opacity-50', 'cursor-not-allowed');
+                          }
+                          try {
+                            const { data: existingData } = await supabase.from('settings').select('value, flutterwave_public_key').eq('id', 'global').maybeSingle();
+                            const newValue = { ...(existingData?.value || {}) };
+                            let updatedValue = false;
+                            
+                            const payload: any = {};
+                            if (settings.flutterwavePublicKey && settings.flutterwavePublicKey.trim() !== '') {
+                              payload.flutterwave_public_key = settings.flutterwavePublicKey;
+                            }
+                            if (settings.siteUrl && settings.siteUrl.trim() !== '') {
+                              payload.site_url = settings.siteUrl;
+                            }
+                            if (settings.cloudinaryUrl && settings.cloudinaryUrl.trim() !== '') {
+                              newValue.cloudinary_url = settings.cloudinaryUrl;
+                              updatedValue = true;
+                            }
+                            if (settings.smtpHost && settings.smtpHost.trim() !== '') {
+                              newValue.smtp_host = settings.smtpHost;
+                              updatedValue = true;
+                            }
+                            if (settings.smtpPort && settings.smtpPort.trim() !== '') {
+                              newValue.smtp_port = settings.smtpPort;
+                              updatedValue = true;
+                            }
+                            if (settings.smtpUser && settings.smtpUser.trim() !== '') {
+                              newValue.smtp_user = settings.smtpUser;
+                              updatedValue = true;
+                            }
+                            if (settings.smtpPass && settings.smtpPass.trim() !== '') {
+                              newValue.smtp_pass = settings.smtpPass;
+                              updatedValue = true;
+                            }
+                            if (settings.smtpSender && settings.smtpSender.trim() !== '') {
+                               newValue.smtp_sender = settings.smtpSender;
+                               updatedValue = true;
+                            }
+                            if (settings.smtpFrom && settings.smtpFrom.trim() !== '') {
+                               newValue.smtp_from = settings.smtpFrom;
+                               updatedValue = true;
+                            }
+
+                            if (updatedValue) {
+                              payload.value = newValue;
+                            }
+                            
+                            if (Object.keys(payload).length > 0) {
+                              let error;
+                              
+                              if (existingData) {
+                                const res = await supabase.from('settings').update(payload).eq('id', 'global');
+                                error = res.error;
+                              } else {
+                                const res = await supabase.from('settings').insert({ id: 'global', ...payload });
+                                error = res.error;
+                              }
+                              if (error) throw error;
+                            }
+                            
+                            // Clear inputs to make them completely invisible as requested
+                            setSettings(prev => ({
+                              ...prev,
+                              flutterwavePublicKey: '',
+                              siteUrl: '',
+                              cloudinaryUrl: '',
+                              smtpHost: '',
+                              smtpPort: '',
+                              smtpUser: '',
+                              smtpPass: ''
+                            }));
+                            
+                            if (btn) {
+                              btn.innerText = 'Saved Successfully!';
+                              btn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-yellow-600', 'hover:bg-yellow-700');
+                              btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                              setTimeout(() => {
+                                btn.innerText = 'Save Integration Keys';
+                                btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                                btn.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
+                                // Refetch to hide again
+                                refreshSettings();
+                              }, 3000);
+                            }
+                          } catch (error) {
+                            console.error("Error saving integration settings:", error);
+                            if (btn) {
+                              btn.innerText = 'Failed to Save';
+                              btn.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-yellow-600', 'hover:bg-yellow-700');
+                              btn.classList.add('bg-red-600', 'hover:bg-red-700');
+                              setTimeout(() => {
+                                btn.innerText = 'Save Integration Keys';
+                                btn.classList.remove('bg-red-600', 'hover:bg-red-700');
+                                btn.classList.add('bg-yellow-600', 'hover:bg-yellow-700');
+                              }, 3000);
+                            }
+                          }
+                        }}
+                        className="bg-yellow-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-yellow-700 transition-colors duration-300"
+                      >
+                        Save Integration Keys
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-6 border border-red-100 rounded-xl bg-red-50/30">
+                    <h3 className="font-bold text-red-900 mb-4 flex items-center gap-2">
+                      <ShieldCheck size={18} /> Password & Security
+                    </h3>
+                    <div className="flex flex-col md:flex-row items-end gap-4">
+                      <div className="flex-grow space-y-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Change Admin Password</label>
+                        <input 
+                          type="password" 
+                          placeholder="Enter new secure password..." 
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-red-600 outline-none"
+                          id="new-admin-password"
+                        />
+                      </div>
+                      <button 
+                        onClick={async () => {
+                          const passwordInput = document.getElementById('new-admin-password') as HTMLInputElement;
+                          const password = passwordInput?.value;
+                          if (!password || password.length < 6) return showToast('Password must be at least 6 characters', 'error');
+                          const { error } = await supabase.auth.updateUser({ password });
+                          if (error) showToast(error.message, 'error');
+                          else {
+                            showToast('Admin password updated successfully!');
+                            if (passwordInput) passwordInput.value = '';
+                          }
+                        }}
+                        className="bg-red-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-red-700 transition-colors shadow-sm"
+                      >
+                        Update Password
+                      </button>
+                    </div>
+                    </div>
+                  </div>
+                )}
                 </div>
               </div>
             )}

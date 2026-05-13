@@ -238,10 +238,12 @@ export default function Login() {
       let msg = err.message || 'Authentication failed. Please try again.';
       if (msg.includes('Failed to fetch')) {
         msg = 'Connection Error: Could not reach the server. Please check your internet connection or disable ad-blockers.';
+      } else if (msg.includes('Invalid API key') || msg.includes('JWT')) {
+        msg = 'Configuration Error: Invalid or missing Supabase API Key. Please make sure to add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in the AI Studio Settings "Secrets" panel.';
       } else if (msg.includes('Invalid login credentials')) {
         msg = 'Invalid credentials. Please check your inputs and try again.';
         if (cleanId.toLowerCase() === 'wingatsem@gmail.com') {
-          msg += ' If you are the owner and need to recover access, please visit /bootstrap-admin.';
+          msg += ' If you have not created your admin account yet, please choose "Register here" first. Once registered, visit /bootstrap to elevate your account to Admin.';
         }
       } else if (msg.includes('Email not confirmed')) {
         msg = 'Please confirm your email address before signing in. Check your inbox for the confirmation link.';
@@ -468,7 +470,7 @@ export default function Login() {
                   {isLogin ? "Don't have an account? Register here" : "Already have an account? Sign in"}
                 </button>
                 <button onClick={() => navigate('/staff-portal')} className="text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-colors">
-                  Staff Portal
+                  Staff Login
                 </button>
               </div>
             )}

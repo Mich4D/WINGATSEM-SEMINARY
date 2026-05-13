@@ -68,32 +68,36 @@ export default function Navbar() {
   return (
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ease-in-out ${navBackground}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className={`flex justify-between items-center transition-all duration-500 ${isScrolled ? 'h-16' : 'h-20 md:h-24'}`}>
+        <div className={`flex justify-between items-center transition-all duration-500 ${isScrolled ? 'h-16' : 'h-20 max-w-7xl mx-auto'}`}>
           {/* Top-Left Logo */}
           <div className="flex items-center">
-            <Link to="/" className="flex items-center gap-3">
+            <Link to="/" className="flex items-center gap-2">
               {logoUrl ? (
                 <img 
                   src={formatImageUrl(logoUrl)} 
                   alt="Winning Gate Logo" 
-                  className="h-16 md:h-20 w-auto object-contain"
+                  className="h-12 md:h-14 w-auto object-contain"
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none';
                   }}
                 />
               ) : (
-                <div className="bg-yellow-600 p-2 md:p-2.5 rounded-full text-white shadow-lg flex items-center gap-2">
-                  <BookOpen size={32} />
+                <div className="bg-[#0a1930] p-2 md:p-2.5 rounded-sm text-yellow-500 shadow-lg flex items-center gap-2">
+                  <BookOpen size={24} />
                 </div>
               )}
+              <div className="hidden sm:flex flex-col justify-center">
+                <span className="font-display font-black text-xl md:text-2xl text-slate-900 block leading-tight tracking-[0.02em] uppercase whitespace-nowrap text-left">WINNING GATE</span>
+                <span className="text-[8px] md:text-[10px] font-bold text-yellow-600 uppercase tracking-[0.15em] block font-sans mt-0.5 whitespace-nowrap text-left">Christian Theological Seminary</span>
+              </div>
             </Link>
           </div>
           
           {/* Top-Right Navigation & Actions */}
           <div className="flex items-center gap-3 lg:gap-4 xl:gap-8">
             {/* Desktop Navigation Menu */}
-            <div className="hidden lg:flex items-center space-x-4 xl:space-x-6">
+            <div className="hidden lg:flex items-center space-x-3 xl:space-x-5">
               {profile?.role === 'student' ? (
                 <>
                   <NavLink to="/dashboard">Dashboard</NavLink>
@@ -115,18 +119,11 @@ export default function Navbar() {
               ) : (
                 <>
                   <NavLink to="/">Home</NavLink>
-                  <NavLink to="/about">About</NavLink>
-                  <NavLink to="/programmes">Programmes</NavLink>
+                  <NavLink to="/about">About Us</NavLink>
+                  <NavLink to="/programmes">Academics</NavLink>
                   <NavLink to="/admissions">Admissions</NavLink>
                   <NavLink to="/gallery">Gallery</NavLink>
-                  <NavLink to="/blog">Blog</NavLink>
-                  <Link to="/live" className="flex items-center gap-1.5 text-slate-800 hover:text-slate-900 font-semibold transition-all">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                    </span>
-                    Live Event
-                  </Link>
+                  <NavLink to="/verify">Resources</NavLink>
                   <NavLink to="/contact">Contact</NavLink>
                 </>
               )}
@@ -205,13 +202,21 @@ export default function Navbar() {
                     to="/staff-portal" 
                     className="hidden lg:flex px-6 py-2.5 bg-blue-900 hover:bg-blue-800 text-white rounded font-semibold text-sm transition-all shadow-[0_0_15px_rgba(30,58,138,0.5)]"
                   >
-                    Teacher Portal
+                    Staff Login
                   </Link>
                 </div>
               )}
 
               {/* Mobile Menu Toggle */}
-              <div className="lg:hidden flex items-center gap-2">
+              <div className="lg:hidden flex items-center gap-3">
+                {!isLoggedIn && (
+                  <Link 
+                    to="/staff-portal" 
+                    className="text-[9px] font-black text-white bg-blue-900 px-3 py-2 rounded-lg uppercase tracking-widest shadow-lg shadow-blue-900/20 active:scale-95 transition-all"
+                  >
+                    Staff Login
+                  </Link>
+                )}
                 <button 
                   onClick={() => setIsOpen(!isOpen)} 
                   className={`p-2 rounded-lg transition-colors ${isHome && !isScrolled ? 'text-white hover:bg-white/10' : 'text-slate-800 hover:bg-slate-100'}`}
@@ -259,6 +264,7 @@ export default function Navbar() {
                   <MobileNavLink to="/programmes">Programmes</MobileNavLink>
                   <MobileNavLink to="/admissions">Admissions</MobileNavLink>
                   <MobileNavLink to="/gallery">Gallery</MobileNavLink>
+                  <MobileNavLink to="/verify">Verification</MobileNavLink>
                   <MobileNavLink to="/blog">Blog</MobileNavLink>
                   <MobileNavLink to="/live" className="text-red-600 font-bold border-l-4 border-red-600 bg-red-50">Live Event</MobileNavLink>
                   <MobileNavLink to="/contact">Contact</MobileNavLink>
@@ -295,8 +301,8 @@ export default function Navbar() {
                   </button>
                 ) : (
                   <>
-                    <Link to="/login" className="block w-full text-center py-3.5 rounded-xl bg-slate-50 text-slate-900 font-bold text-sm tracking-widest uppercase">Student Login</Link>
-                    <Link to="/staff-portal" className="block w-full text-center py-3.5 rounded-xl bg-blue-900 text-white font-bold text-sm tracking-widest uppercase shadow-lg shadow-blue-900/40">Teacher Portal</Link>
+                    <Link to="/login" className="block w-full text-center py-3.5 rounded-xl bg-slate-50 text-slate-900 font-bold text-sm tracking-widest uppercase shadow-sm border border-slate-200">Student Login</Link>
+                    <Link to="/staff-portal" className="block w-full text-center py-3.5 rounded-xl bg-blue-900 text-white font-bold text-sm tracking-widest uppercase shadow-lg shadow-blue-900/40">Staff Login</Link>
                   </>
                 )}
               </div>

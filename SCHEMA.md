@@ -1,249 +1,161 @@
-# Supabase Database Setup
+# Supabase Database Setup (FINAL FIX)
 
-To fix the registration and profile completion issues, please run the following SQL in your Supabase SQL Editor.
+To fix all database related issues, please run the following **Master SQL Block** in your Supabase SQL Editor. 
 
-## 1. Update Users Table
-Run this to add missing columns and set up security for the `users` table:
-
-```sql
--- 1. Add missing columns to users table
-ALTER TABLE users ADD COLUMN IF NOT EXISTS program_type TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS class_language TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS academic_credential_url TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS academic_history JSONB;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_fee_paid BOOLEAN DEFAULT FALSE;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS tuition_fee_paid BOOLEAN DEFAULT FALSE;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed BOOLEAN DEFAULT FALSE;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS is_approved BOOLEAN DEFAULT FALSE;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_number TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS selfie_url TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image_url TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS reference_letter1_url TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS reference_letter2_url TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS baptism_certificate_url TEXT;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS date_registered TIMESTAMPTZ DEFAULT NOW();
-ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
-
--- 2. Enable Row Level Security
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-
--- 3. Create Security Policies (Drop first to avoid errors if they exist)
-DROP POLICY IF EXISTS "Users can update own profile" ON users;
-CREATE POLICY "Users can update own profile" 
-ON users FOR UPDATE 
-TO authenticated 
-USING (auth.uid() = id);
-
-DROP POLICY IF EXISTS "Users can insert own profile" ON users;
-CREATE POLICY "Users can insert own profile" 
-ON users FOR INSERT 
-TO authenticated 
-WITH CHECK (auth.uid() = id);
-
-DROP POLICY IF EXISTS "Users can read own profile" ON users;
-CREATE POLICY "Users can read own profile" 
-ON users FOR SELECT 
-TO authenticated 
-USING (auth.uid() = id);
-
--- 4. Create Admin Security Policies so Admins can see all students
--- FIX: Using a more robust check to avoid infinite recursion
-CREATE OR REPLACE FUNCTION public.is_admin(user_id uuid)
-RETURNS BOOLEAN AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.users 
-    WHERE id = user_id AND role = 'admin'
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
-
--- RPC Function for Admin Dashboard to fetch users without RLS recursion
-CREATE OR REPLACE FUNCTION public.admin_get_all_users()
-RETURNS SETOF public.users AS $$
-BEGIN
-  -- Re-validate admin status
-  IF EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin') THEN
-    RETURN QUERY SELECT * FROM public.users;
-  ELSE
-    RAISE EXCEPTION 'Not authorized';
-  END IF;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
-
-DROP POLICY IF EXISTS "Admins can read all profiles" ON users;
-CREATE POLICY "Admins can read all profiles" 
-ON users FOR SELECT 
-TO authenticated 
-USING ( public.is_admin(auth.uid()) );
-
--- 5. Public Verification Policy (MANDATORY for the Verification Portal)
-DROP POLICY IF EXISTS "Allow public student verification" ON users;
-CREATE POLICY "Allow public student verification" 
-ON users FOR SELECT 
-TO public 
-USING (registration_number IS NOT NULL);
-
-DROP POLICY IF EXISTS "Allow public certificate verification" ON certificates;
-CREATE POLICY "Allow public certificate verification" 
-ON certificates FOR SELECT 
-TO public 
-USING (true);
-
--- 6. Admin Management Policies
-DROP POLICY IF EXISTS "Admins can insert users" ON users;
-CREATE POLICY "Admins can insert users" 
-ON users FOR INSERT 
-TO authenticated 
-WITH CHECK ( public.is_admin(auth.uid()) );
-
-DROP POLICY IF EXISTS "Admins can delete users" ON users;
-CREATE POLICY "Admins can delete users" 
-ON users FOR DELETE 
-TO authenticated 
-USING ( public.is_admin(auth.uid()) );
-
-DROP POLICY IF EXISTS "Admins can update users" ON users;
-CREATE POLICY "Admins can update users" 
-ON users FOR UPDATE 
-TO authenticated 
-USING ( public.is_admin(auth.uid()) );
-
--- 7. Policies for other tables (Certificates, Grades, Assignments, etc.)
-ALTER TABLE certificates ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Admins can manage certificates" ON certificates;
-CREATE POLICY "Admins can manage certificates" ON certificates FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
-
-ALTER TABLE grades ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Admins can manage grades" ON grades;
-CREATE POLICY "Admins can manage grades" ON grades FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
-
-ALTER TABLE assignments ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Admins can manage assignments" ON assignments;
-CREATE POLICY "Admins can manage assignments" ON assignments FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
-
-ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Admins can manage departments" ON departments;
-CREATE POLICY "Admins can manage departments" ON departments FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
-
-ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Admins can manage courses" ON courses;
-CREATE POLICY "Admins can manage courses" ON courses FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
-
----
-
-## 5. Master Admin & Cascade Delete Fixes
-Run this if you have issues deleting teachers/students or seeing "infinite recursion" errors:
+### 📱 MOBILE USERS: Copy the entire block below and paste it once.
 
 ```sql
--- 1. Ensure public.is_admin is SECURITY DEFINER to bypass RLS recursion
-CREATE OR REPLACE FUNCTION public.is_admin(user_id uuid)
-RETURNS BOOLEAN AS $$
-BEGIN
-  RETURN EXISTS (
-    SELECT 1 FROM public.users 
-    WHERE id = user_id AND role = 'admin'
-  );
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+-- 1. EXTENSIONS & PREREQUISITES
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. Add CASCADE DELETE to related tables so users can be removed cleanly
--- Assignments
-ALTER TABLE public.assignments 
-DROP CONSTRAINT IF EXISTS assignments_teacher_id_fkey,
-ADD CONSTRAINT assignments_teacher_id_fkey 
-  FOREIGN KEY (teacher_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
--- Grades
-ALTER TABLE public.grades 
-DROP CONSTRAINT IF EXISTS grades_student_id_fkey,
-ADD CONSTRAINT grades_student_id_fkey 
-  FOREIGN KEY (student_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-ALTER TABLE public.grades 
-DROP CONSTRAINT IF EXISTS grades_teacher_id_fkey,
-ADD CONSTRAINT grades_teacher_id_fkey 
-  FOREIGN KEY (teacher_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
--- 3. Reset and Re-apply Admin Policies for Users table
-DROP POLICY IF EXISTS "Admins can delete users" ON users;
-CREATE POLICY "Admins can delete users" 
-ON users FOR DELETE 
-TO authenticated 
-USING ( public.is_admin(auth.uid()) );
-
-DROP POLICY IF EXISTS "Admins can update users" ON users;
-CREATE POLICY "Admins can update users" 
-ON users FOR UPDATE 
-TO authenticated 
-USING ( public.is_admin(auth.uid()) );
-```
-
-### ⚠️ IMPORTANT: Email Confirmation
-By default, Supabase requires users to confirm their email address before they can log in.
-If your students are getting "Invalid login credentials" even with the correct password:
-
-1. Go to **Authentication** -> **Providers** -> **Email**.
-2. Toggle **Confirm email** to **OFF** if you want them to log in immediately.
-3. Or, tell students to check their inbox (and spam folder) for the confirmation link.
-```
-
-## 2. Initialize Settings Table
-If you haven't created the `settings` table yet, or if it's empty, run this:
-
-```sql
--- Create settings table if it doesn't exist with all functional fields
-CREATE TABLE IF NOT EXISTS settings (
+-- 2. SETTINGS TABLE FIX (Crucial for Logo & Images)
+-- We use TEXT for ID so we can use "global", "anthem", etc.
+CREATE TABLE IF NOT EXISTS public.settings (
   id TEXT PRIMARY KEY,
   fees JSONB,
   flutterwave_public_key TEXT,
   logo_url TEXT,
+  admission_flyer_url TEXT,
   hero_bg_url TEXT,
   rector_image_url TEXT,
+  about_image_url TEXT,
+  live_stream_url TEXT,
   anthem_url TEXT,
   anthem_title TEXT DEFAULT 'School Anthem',
   school_name TEXT DEFAULT 'WGTS',
   is_admission_open BOOLEAN DEFAULT TRUE,
   important_dates JSONB,
-  admission_notification_email TEXT
+  admission_notification_email TEXT,
+  value JSONB,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Insert the global settings row with initial defaults
-INSERT INTO settings (id, fees, flutterwave_public_key, is_admission_open, important_dates)
-VALUES ('global', '{
+-- If ID is currently UUID, we need to change it to TEXT
+DO $$ 
+BEGIN
+    IF (SELECT data_type FROM information_schema.columns WHERE table_name = 'settings' AND column_name = 'id') = 'uuid' THEN
+        ALTER TABLE public.settings ALTER COLUMN id TYPE TEXT;
+    END IF;
+END $$;
+
+-- Populate Global Settings
+INSERT INTO public.settings (id, school_name, is_admission_open, fees)
+VALUES ('global', 'Winning Gate Christian Theological Seminary', true, '{
   "registration": 10000,
   "tuition": {
-    "100": 100000,
-    "200": 100000,
-    "300": 100000,
-    "400": 100000
+    "diploma": 100000,
+    "bachelor": 120000,
+    "master": 150000,
+    "doctorate": 180000
   }
-}', 'FLWPUBK_TEST-59e5b8b99061c41001901642cc671e15-X', true, '{
-  "applicationOpens": "1st May 2026",
-  "applicationDeadline": "30th Aug 2026",
-  "orientationBegins": "15th Sept 2026"
-}')
-ON CONFLICT (id) DO UPDATE SET
-  fees = EXCLUDED.fees,
-  flutterwave_public_key = EXCLUDED.flutterwave_public_key,
-  important_dates = EXCLUDED.important_dates;
-```
+}') ON CONFLICT (id) DO NOTHING;
 
-## 3. Create Storage Bucket
-The application expects a storage bucket named `App_files`.
+-- 3. CORE USERS TABLE
+CREATE TABLE IF NOT EXISTS public.users (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT,
+  email TEXT UNIQUE,
+  role TEXT DEFAULT 'student',
+  is_approved BOOLEAN DEFAULT FALSE,
+  level TEXT,
+  department_code TEXT,
+  registration_number TEXT UNIQUE,
+  profile_image_url TEXT,
+  selfie_url TEXT,
+  reference_letter1_url TEXT,
+  reference_letter2_url TEXT,
+  baptism_certificate_url TEXT,
+  academic_credential_url TEXT,
+  date_registered TIMESTAMPTZ DEFAULT NOW(),
+  phone_number TEXT,
+  address TEXT,
+  date_of_birth TEXT,
+  gender TEXT,
+  nationality TEXT,
+  state_of_origin TEXT,
+  city TEXT,
+  declaration_of_faith TEXT,
+  baptism_date TEXT,
+  church_name TEXT,
+  church_position TEXT,
+  learning_mode TEXT,
+  profile_completed BOOLEAN DEFAULT FALSE,
+  program_type TEXT,
+  class_language TEXT DEFAULT 'English',
+  academic_history JSONB DEFAULT '{}'::jsonb,
+  registration_fee_paid BOOLEAN DEFAULT FALSE,
+  tuition_fee_paid BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-1. Go to **Storage** in your Supabase dashboard.
-2. Click **New Bucket**.
-3. Name it `App_files`.
-4. Set it to **Public** (this is the easiest way to ensure images show up).
-5. Click **Save**.
+-- 4. ACADEMIC & DEPARTMENT TABLES
+CREATE TABLE IF NOT EXISTS public.departments (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name TEXT NOT NULL,
+  code TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-## 4. Create Mail and Gallery Tables
-Run this to create the tables for messages and gallery:
+CREATE TABLE IF NOT EXISTS public.courses (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  department_id uuid REFERENCES public.departments(id) ON DELETE CASCADE,
+  course_name TEXT NOT NULL,
+  level TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-```sql
--- Mail Table
-CREATE TABLE IF NOT EXISTS mail (
+CREATE TABLE IF NOT EXISTS public.grades (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid REFERENCES public.users(id) ON DELETE CASCADE,
+  course_name TEXT,
+  credits INTEGER DEFAULT 3,
+  score INTEGER,
+  grade TEXT,
+  teacher_id uuid REFERENCES public.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. MEDIA & BLOG TABLES
+CREATE TABLE IF NOT EXISTS public.gallery (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  year TEXT NOT NULL,
+  caption TEXT,
+  image_url TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.gallery_videos (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  year TEXT NOT NULL,
+  title TEXT,
+  video_url TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.blog_posts (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  excerpt TEXT,
+  cover_image_url TEXT,
+  status TEXT DEFAULT 'draft',
+  author_id uuid REFERENCES public.users(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6. PAYMENTS & INFRASTRUCTURE
+CREATE TABLE IF NOT EXISTS public.payments (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid REFERENCES public.users(id),
+  amount NUMERIC NOT NULL,
+  payment_type TEXT,
+  transaction_id TEXT,
+  status TEXT DEFAULT 'completed',
+  timestamp TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.mail (
   id BIGSERIAL PRIMARY KEY,
   "to" TEXT,
   subject TEXT,
@@ -252,91 +164,94 @@ CREATE TABLE IF NOT EXISTS mail (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Gallery Table (Images)
-CREATE TABLE IF NOT EXISTS gallery (
-  id BIGSERIAL PRIMARY KEY,
-  year TEXT,
-  caption TEXT,
-  image_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- 7. SECURITY & POLICIES (MASTER RESET)
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gallery ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gallery_videos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.blog_posts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mail ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.grades ENABLE ROW LEVEL SECURITY;
 
--- Gallery Videos Table
-CREATE TABLE IF NOT EXISTS gallery_videos (
-  id BIGSERIAL PRIMARY KEY,
-  year TEXT,
-  title TEXT,
-  video_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- Dynamic Admin Check Function
+CREATE OR REPLACE FUNCTION public.is_admin(user_id uuid)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (SELECT 1 FROM public.users WHERE id = user_id AND role = 'admin');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Enable RLS
-ALTER TABLE mail ENABLE ROW LEVEL SECURITY;
-ALTER TABLE gallery ENABLE ROW LEVEL SECURITY;
-ALTER TABLE gallery_videos ENABLE ROW LEVEL SECURITY;
+-- Clear previous policies to avoid errors
+DO $$ 
+BEGIN
+    -- This will clear most policies. Add more if needed.
+    EXECUTE (SELECT 'DROP POLICY IF EXISTS ' || quote_ident(policyname) || ' ON ' || quote_ident(tablename) 
+             FROM pg_policies WHERE schemaname = 'public');
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
 
--- Policies for Mail
-DROP POLICY IF EXISTS "Public can insert mail" ON mail;
-CREATE POLICY "Public can insert mail" ON mail FOR INSERT TO public WITH CHECK (true);
-DROP POLICY IF EXISTS "Admins can read mail" ON mail;
-CREATE POLICY "Admins can read mail" ON mail FOR SELECT TO authenticated USING ( public.is_admin(auth.uid()) );
+-- Define Policies
+CREATE POLICY "Public Read Access" ON public.settings FOR SELECT TO public USING (true);
+CREATE POLICY "Public Read Gallery" ON public.gallery FOR SELECT TO public USING (true);
+CREATE POLICY "Public Read Videos" ON public.gallery_videos FOR SELECT TO public USING (true);
+CREATE POLICY "Public Read Blog" ON public.blog_posts FOR SELECT TO public USING (status = 'published');
+CREATE POLICY "Admin All Access Settings" ON public.settings FOR ALL TO authenticated USING (public.is_admin(auth.uid())) WITH CHECK (public.is_admin(auth.uid()));
+CREATE POLICY "Admin All Access Gallery" ON public.gallery FOR ALL TO authenticated USING (public.is_admin(auth.uid())) WITH CHECK (public.is_admin(auth.uid()));
+CREATE POLICY "Admin All Access Videos" ON public.gallery_videos FOR ALL TO authenticated USING (public.is_admin(auth.uid())) WITH CHECK (public.is_admin(auth.uid()));
+CREATE POLICY "Admin All Access Blog" ON public.blog_posts FOR ALL TO authenticated USING (public.is_admin(auth.uid())) WITH CHECK (public.is_admin(auth.uid()));
+CREATE POLICY "Users Read Own" ON public.users FOR SELECT TO authenticated USING (auth.uid() = id);
+CREATE POLICY "Public Student Check" ON public.users FOR SELECT TO public USING (registration_number IS NOT NULL);
+CREATE POLICY "Admin All Access Users" ON public.users FOR ALL TO authenticated USING (public.is_admin(auth.uid()));
 
--- Policies for Gallery
-DROP POLICY IF EXISTS "Public can view gallery" ON gallery;
-CREATE POLICY "Public can view gallery" ON gallery FOR SELECT TO public USING (true);
-DROP POLICY IF EXISTS "Admins can manage gallery" ON gallery;
-CREATE POLICY "Admins can manage gallery" ON gallery FOR ALL TO authenticated USING ( public.is_admin(auth.uid()) );
+-- 8. TRIGGERS
+CREATE OR REPLACE FUNCTION public.handle_new_user() 
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.users (id, email, name, role)
+  VALUES (new.id, new.email, COALESCE(new.raw_user_meta_data->>'name', 'User'), 'student')
+  ON CONFLICT (id) DO NOTHING;
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Policies for Gallery Videos
-DROP POLICY IF EXISTS "Public can view gallery_videos" ON gallery_videos;
-CREATE POLICY "Public can view gallery_videos" ON gallery_videos FOR SELECT TO public USING (true);
-DROP POLICY IF EXISTS "Admins can manage gallery_videos" ON gallery_videos;
-CREATE POLICY "Admins can manage gallery_videos" ON gallery_videos FOR ALL TO authenticated USING ( public.is_admin(auth.uid()) );
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 ```
 
-## 5. Blog Posts Table
+### 🚨 HOW TO FIX "LOGO NOT SHOWING"
+1. Run the SQL above.
+2. Go to your Admin Dashboard.
+3. Re-upload your logo in the **Settings** tab. 
+4. The system will now save it correctly.
 
-Run this to create the table for the blog:
+### 🔐 HOW TO GAIN ADMIN ACCESS
+If you can't reach the admin dashboard, run this SQL with your email:
+```sql
+UPDATE public.users SET role = 'admin' WHERE email = 'your-email@example.com';
+```
+
+### 📁 STORAGE BUCKET SETUP
+You MUST create public storage buckets in Supabase for everything to work correctly:
+1. Go to **Storage** in Supabase.
+2. Click **New Bucket**.
+3. Create the following buckets:
+   - `image`: Name it **image** and make it **Public**. (Used for school logo, rector photo, gallery photos, etc.)
+   - `student`: Name it **student** and make it **Public**. (Used for student documents like PDF/Images for registration)
+4. **Apply Storage Policies:** Run the following SQL in your SQL Editor to secure these buckets:
 
 ```sql
--- Blog Posts Table
-CREATE TABLE IF NOT EXISTS blog_posts (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  title TEXT NOT NULL,
-  content TEXT NOT NULL,
-  excerpt TEXT,
-  cover_image_url TEXT,
-  status TEXT DEFAULT 'draft',
-  author_id uuid REFERENCES public.users(id),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
+-- Policies for 'image' bucket
+CREATE POLICY "Public Read Image" ON storage.objects FOR SELECT USING (bucket_id = 'image');
+CREATE POLICY "Admin Full Access Image" ON storage.objects FOR ALL TO authenticated USING (bucket_id = 'image' AND public.is_admin(auth.uid()));
 
--- Enable RLS
-ALTER TABLE blog_posts ENABLE ROW LEVEL SECURITY;
-
--- Policies for Blog Posts
-DROP POLICY IF EXISTS "Public can read published posts" ON blog_posts;
-CREATE POLICY "Public can read published posts" ON blog_posts FOR SELECT TO public USING (status = 'published');
-
-DROP POLICY IF EXISTS "Admins can manage blog posts" ON blog_posts;
-CREATE POLICY "Admins can manage blog posts" ON blog_posts FOR ALL TO authenticated USING ( public.is_admin(auth.uid()) );
-
-DROP POLICY IF EXISTS "Admins can view draft posts" ON blog_posts;
-CREATE POLICY "Admins can view draft posts" ON blog_posts FOR SELECT TO authenticated USING ( public.is_admin(auth.uid()) );
+-- Policies for 'student' bucket
+CREATE POLICY "Public Read Student" ON storage.objects FOR SELECT USING (bucket_id = 'student');
+CREATE POLICY "Student Upload Access" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'student');
+CREATE POLICY "Admin Full Access Student" ON storage.objects FOR ALL TO authenticated USING (bucket_id = 'student' AND public.is_admin(auth.uid()));
 ```
+5. Ensure these are exactly named `image` and `student`.
 
-### Manual Storage Policies (If not Public)
-If you prefer not to make the bucket public, add these policies to the `App_files` bucket:
-
-**Allow Uploads:**
-- Policy Name: `Allow Authenticated Uploads`
-- Allowed Operations: `INSERT`, `UPDATE`
-- Target Role: `authenticated`
-- Check Expression: `(bucket_id = 'App_files'::text)`
-
-**Allow Reads:**
-- Policy Name: `Allow Public Reads`
-- Allowed Operations: `SELECT`
-- Target Role: `public`
-- Check Expression: `(bucket_id = 'App_files'::text)`

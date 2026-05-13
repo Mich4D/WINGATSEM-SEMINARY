@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { PlayCircle, Image as ImageIcon, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { formatImageUrl } from '../utils/formatImage';
 import { motion, AnimatePresence } from 'motion/react';
+import { useSettings } from '../contexts/SettingsContext';
 
 export default function Gallery() {
   const [images, setImages] = useState<any[]>([]);
@@ -10,54 +11,140 @@ export default function Gallery() {
   const [liveStreamUrl, setLiveStreamUrl] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState<string>('All');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { } = useSettings();
 
   // Lightbox state
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [selectedImageYear, setSelectedImageYear] = useState<string | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
+    
+    const fetchWithRetry = async <T,>(operation: () => Promise<T>, maxRetries = 3, delayMs = 3000): Promise<T> => {
+      let lastResult: any;
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          const result = await operation();
+          if ((result as any)?.error?.message?.toLowerCase().includes('timeout')) {
+            lastResult = result;
+            console.log(`Gallery fetch timeout, retrying... (${i + 1}/${maxRetries})`);
+            await new Promise(r => setTimeout(r, delayMs));
+            continue;
+          }
+          return result;
+        } catch (e: any) {
+          if (e.message?.toLowerCase().includes('timeout')) {
+             lastResult = { error: e };
+             console.log(`Gallery fetch timeout (exception), retrying... (${i + 1}/${maxRetries})`);
+             await new Promise(r => setTimeout(r, delayMs));
+             continue;
+          }
+          throw e;
+        }
+      }
+      return lastResult;
+    };
+
     const fetchGalleryData = async () => {
       try {
+        setLoading(true);
+        setErrorMsg(null);
+        
         // Fetch live stream URL
-        const { data: settingsData } = await supabase
+        const { data: settingsData } = await fetchWithRetry<any>(() => (supabase
           .from('settings')
           .select('live_stream_url')
           .eq('id', 'global')
-          .single();
+          .single() as any), 2);
           
-        if (settingsData?.live_stream_url) {
+        if (settingsData?.live_stream_url && isMounted) {
           setLiveStreamUrl(settingsData.live_stream_url);
         }
 
         // Fetch gallery images
-        const { data: galleryData } = await supabase
-          .from('gallery')
-          .select('*')
-          .order('year', { ascending: false })
-          .order('created_at', { ascending: false });
-          
-        if (galleryData) {
-          setImages(galleryData);
+        try {
+          const { data: galleryData, error: imgError } = await fetchWithRetry<any>(() => (supabase
+            .from('gallery')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(100) as any));
+            
+          if (imgError && isMounted) {
+            console.error("Gallery images error:", imgError);
+            setErrorMsg(prev => {
+              const newMsg = `Images: ${imgError.message}`;
+              if (prev && prev.includes(newMsg)) return prev;
+              return (prev ? prev + " | " : "") + newMsg;
+            });
+          } else if (galleryData && isMounted) {
+            setImages(galleryData);
+          }
+        } catch (e: any) {
+          console.error(e);
         }
 
         // Fetch gallery videos
-        const { data: videoData } = await supabase
-          .from('gallery_videos')
-          .select('*')
-          .order('year', { ascending: false })
-          .order('created_at', { ascending: false });
-          
-        if (videoData) {
-          setVideos(videoData);
+        try {
+          const { data: videoData, error: vidError } = await fetchWithRetry<any>(() => (supabase
+            .from('gallery_videos')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(50) as any));
+            
+          if (vidError && isMounted) {
+            console.error("Gallery videos error:", vidError);
+            setErrorMsg(prev => {
+              const newMsg = `Videos: ${vidError.message}`;
+              if (prev && prev.includes(newMsg)) return prev;
+              return (prev ? prev + " | " : "") + newMsg;
+            });
+          } else if (videoData && isMounted) {
+            setVideos(videoData);
+          }
+        } catch (e: any) {
+          console.error(e);
         }
-      } catch (error) {
-        console.error("Error fetching gallery data:", error);
+      } catch (error: any) {
+        if (isMounted) {
+          console.error("Error fetching gallery data:", error);
+          setErrorMsg(error.message || "Unknown error fetching gallery");
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchGalleryData();
+
+    // Set up realtime subscriptions
+    const imagesSubscription = supabase.channel('gallery-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery' }, payload => {
+        if (payload.eventType === 'INSERT') {
+          setImages(prev => [payload.new, ...prev]);
+        } else if (payload.eventType === 'DELETE') {
+          setImages(prev => prev.filter(img => img.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+
+    const videosSubscription = supabase.channel('gallery-videos-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gallery_videos' }, payload => {
+        if (payload.eventType === 'INSERT') {
+          setVideos(prev => [payload.new, ...prev]);
+        } else if (payload.eventType === 'DELETE') {
+          setVideos(prev => prev.filter(vid => vid.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(imagesSubscription);
+      supabase.removeChannel(videosSubscription);
+    };
   }, []);
 
   // Helper to convert standard YouTube URL to embed URL
@@ -102,7 +189,11 @@ export default function Gallery() {
   }, {} as Record<string, any[]>);
 
   const allYears = new Set([...Object.keys(groupedImages), ...Object.keys(groupedVideos)]);
-  const years = Array.from(allYears).sort((a, b) => parseInt(b) - parseInt(a));
+  const years = Array.from(allYears).sort((a, b) => {
+    if (a === 'General Pictures') return -1;
+    if (b === 'General Pictures') return 1;
+    return parseInt(b) - parseInt(a);
+  });
 
   // Lightbox handlers
   const openLightbox = (year: string, index: number) => {
@@ -144,6 +235,25 @@ export default function Gallery() {
         </div>
 
         {/* Live Stream Section */}
+        
+        {errorMsg && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-6 rounded-lg mb-8">
+            <h3 className="text-red-800 font-bold text-lg flex items-center gap-2">
+              <X className="w-5 h-5 text-red-600" />
+              Failed to load gallery
+            </h3>
+            <p className="text-red-700 mt-2 font-mono text-sm">{errorMsg}</p>
+            {errorMsg.toLowerCase().includes('timeout') ? (
+              <div className="mt-4 p-4 bg-orange-100 rounded text-orange-800 text-sm border border-orange-200">
+                <p className="font-bold mb-1">Temporary Database Timeout</p>
+                <p>The Supabase database took too long to respond. This is usually a temporary issue that happens if the database is waking up from being paused, or if the server is under heavy load. Please wait a few seconds and refresh the page.</p>
+              </div>
+            ) : (
+              <p className="text-red-600 text-sm mt-3 font-medium">Please check the Supabase Table RLS permissions for the 'gallery' and 'gallery_videos' tables, ensuring there is a policy that allows unauthenticated/anonymous 'select' queries.</p>
+            )}
+          </div>
+        )}
+
         {liveStreamUrl && (
           <div className="mb-20">
             <div className="flex items-center gap-3 mb-8">
@@ -213,10 +323,12 @@ export default function Gallery() {
 
                   <div className="flex flex-col md:flex-row md:items-end gap-4 mb-8 relative z-10">
                     <div>
-                      <h3 className="text-3xl md:text-4xl font-display font-black text-slate-900 tracking-tight leading-none mb-2">Class of {year}</h3>
+                      <h3 className="text-3xl md:text-4xl font-display font-black text-slate-900 tracking-tight leading-none mb-2">
+                        {year === 'General Pictures' ? 'General Media & Banners' : `Class of ${year}`}
+                      </h3>
                       <p className="text-xs font-bold text-yellow-600 uppercase tracking-widest flex items-center gap-2">
                         <span className="w-4 h-[2px] bg-yellow-600"></span>
-                        Graduation Album
+                        {year === 'General Pictures' ? 'Featured Collection' : 'Graduation Album'}
                       </p>
                     </div>
                   </div>
@@ -276,8 +388,13 @@ export default function Gallery() {
           ) : (
             <div className="bg-white p-12 rounded-2xl shadow-sm border border-slate-100 text-center">
               <ImageIcon className="mx-auto text-slate-300 mb-4" size={48} />
-              <h3 className="text-xl font-bold text-slate-700 mb-2">No Images Yet</h3>
-              <p className="text-slate-500">Graduation ceremony pictures will appear here once uploaded.</p>
+              <h3 className="text-xl font-bold text-slate-700 mb-2">No Images Found</h3>
+              <p className="text-slate-500 mb-4">Graduation ceremony pictures will appear here once uploaded.</p>
+              <div className="text-xs text-amber-600 bg-amber-50 p-4 rounded-lg inline-block text-left">
+                <p className="font-bold">Admin Notice:</p>
+                <p>If you uploaded images but they aren't showing here, check your Supabase RLS policies.</p>
+                <p className="mt-1">You must allow <b>SELECT</b> operations for the <b>anon</b> role on the <b>gallery</b> table.</p>
+              </div>
             </div>
           )}
         </div>
@@ -346,7 +463,7 @@ export default function Gallery() {
                   </p>
                 )}
                 <div className="flex items-center justify-center gap-4 text-white/50 text-sm font-semibold tracking-widest uppercase">
-                  <span>Class of {selectedImageYear}</span>
+                  <span>{selectedImageYear === 'General Pictures' ? 'General' : `Class of ${selectedImageYear}`}</span>
                   <span className="w-1.5 h-1.5 rounded-full bg-yellow-600"></span>
                   <span>{selectedImageIndex + 1} / {groupedImages[selectedImageYear].length}</span>
                 </div>
