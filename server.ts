@@ -354,19 +354,12 @@ async function getTransporter() {
   const config: any = {
     auth: { user, pass },
     debug: true,
-    logger: true
+    logger: true,
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    family: 4 // Force IPv4 to prevent ENETUNREACH in IPv6-restricted environments
   };
-
-  if (isGmail) {
-    config.service = 'gmail';
-  } else {
-    config.host = smtpHost;
-    config.port = smtpPort;
-    config.secure = smtpPort === 465;
-  }
-  
-  // Force IPv4 to prevent ENETUNREACH in IPv6-restricted environments
-  config.family = 4;
 
   return nodemailer.createTransport(config);
 }
