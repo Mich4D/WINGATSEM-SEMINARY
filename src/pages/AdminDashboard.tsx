@@ -251,28 +251,29 @@ export default function AdminDashboard() {
         }
 
         if (globalSettings) {
+          const v = globalSettings.value || {};
           setSettings({
-            logoUrl: globalSettings.logoUrl || globalSettings.logo_url || '',
-            rectorImageUrl: globalSettings.rectorImageUrl || globalSettings.rector_image_url || globalSettings.rectorUrl || '',
-            heroBgUrl: globalSettings.heroBgUrl || globalSettings.hero_bg_url || '',
-            aboutImageUrl: globalSettings.aboutImageUrl || globalSettings.about_image_url || null,
-            liveStreamUrl: globalSettings.liveStreamUrl || globalSettings.live_stream_url || '',
-            anthemUrl: globalSettings.anthemUrl || globalSettings.anthem_url || '',
-            anthemTitle: globalSettings.anthemTitle || globalSettings.anthem_title || 'School Anthem',
-            admissionFlyerUrl: globalSettings.admissionFlyerUrl || globalSettings.admission_flyer_url || '',
-            heroBanners: parsedBanners.length > 0 ? parsedBanners : (globalSettings.hero_banners || []),
+            logoUrl: globalSettings.logoUrl || globalSettings.logo_url || v.logo_url || '',
+            rectorImageUrl: globalSettings.rectorImageUrl || globalSettings.rector_image_url || v.rector_image_url || globalSettings.rectorUrl || '',
+            heroBgUrl: globalSettings.heroBgUrl || globalSettings.hero_bg_url || v.hero_bg_url || '',
+            aboutImageUrl: globalSettings.aboutImageUrl || globalSettings.about_image_url || v.about_image_url || null,
+            liveStreamUrl: globalSettings.liveStreamUrl || globalSettings.live_stream_url || v.live_stream_url || '',
+            anthemUrl: globalSettings.anthemUrl || globalSettings.anthem_url || v.anthem_url || '',
+            anthemTitle: globalSettings.anthemTitle || globalSettings.anthem_title || v.anthem_title || 'School Anthem',
+            admissionFlyerUrl: globalSettings.admissionFlyerUrl || globalSettings.admission_flyer_url || v.admission_flyer_url || '',
+            heroBanners: parsedBanners.length > 0 ? parsedBanners : (globalSettings.hero_banners || v.hero_banners || []),
             testimonials: parsedTestimonials,
-            siteUrl: globalSettings.site_url || globalSettings.siteUrl || globalSettings.value?.site_url || '',
-            flutterwavePublicKey: '',
-            cloudinaryUrl: '',
-            smtpHost: '',
-            smtpPort: '',
-            smtpUser: '',
-            smtpPass: '',
-            smtpSender: globalSettings.value?.smtp_sender || 'Winning Gate Seminary',
-            smtpFrom: globalSettings.value?.smtp_from || '',
-            isAdmissionOpen: globalSettings.is_admission_open ?? true,
-            importantDates: globalSettings.important_dates || {
+            siteUrl: globalSettings.site_url || globalSettings.siteUrl || v.site_url || '',
+            flutterwavePublicKey: globalSettings.flutterwave_public_key || v.flutterwave_public_key || '',
+            cloudinaryUrl: v.cloudinary_url || '',
+            smtpHost: v.smtp_host || '',
+            smtpPort: v.smtp_port || '',
+            smtpUser: v.smtp_user || '',
+            smtpPass: v.smtp_pass || '',
+            smtpSender: v.smtp_sender || 'Winning Gate Seminary',
+            smtpFrom: v.smtp_from || '',
+            isAdmissionOpen: globalSettings.is_admission_open ?? v.is_admission_open ?? true,
+            importantDates: globalSettings.important_dates || v.important_dates || {
               applicationOpens: 'Aug 15',
               applicationDeadline: 'Oct 30',
               orientationBegins: 'Nov 15'
@@ -1085,49 +1086,36 @@ export default function AdminDashboard() {
     try {
       const formattedUrl = type === 'liveStream' || type === 'anthem' ? url : formatImageUrl(url);
       
-      if (type === 'anthem') {
-        const { error } = await supabase.from('settings').upsert({
-          id: 'anthem',
-          value: JSON.stringify({ url: formattedUrl, title: settings.anthemTitle || 'School Anthem' })
+      // Fetch latest value object to preserve other keys
+      const { data: currentGlobal } = await supabase.from('settings').select('value').eq('id', 'global').maybeSingle();
+      const updatedValue = { ...(currentGlobal?.value || {}) };
+      
+      const dbKey = type === 'logo' ? 'logo_url' : 
+                    type === 'rectorImage' ? 'rector_image_url' : 
+                    type === 'heroBg' ? 'hero_bg_url' : 
+                    type === 'liveStream' ? 'live_stream_url' :
+                    type === 'admissionFlyer' ? 'admission_flyer_url' :
+                    type === 'aboutImage' ? 'about_image_url' :
+                    type === 'anthem' ? 'anthem_url' :
+                    type;
+
+      updatedValue[dbKey] = formattedUrl;
+      if (type === 'anthem') updatedValue.anthem_title = settings.anthemTitle || 'School Anthem';
+
+      // Always update via value column for redundancy
+      const { error } = await supabase.from('settings').upsert({
+        id: 'global',
+        [dbKey]: formattedUrl, // Try updating flat column if it exists
+        value: updatedValue
+      });
+      
+      if (error) {
+        // If flat column assignment failed, try just updating the value object
+        const { error: fallbackError } = await supabase.from('settings').upsert({
+          id: 'global',
+          value: updatedValue
         });
-        if (error) throw error;
-        
-        // Also save to global row
-        await supabase.from('settings').update({
-          anthem_url: formattedUrl,
-          anthem_title: settings.anthemTitle || 'School Anthem'
-        }).eq('id', 'global');
-      } else if (type === 'aboutImage') {
-        const { error } = await supabase.from('settings').upsert({
-          id: 'about',
-          value: JSON.stringify({ url: formattedUrl })
-        });
-        if (error) throw error;
-        
-        // Also update global row
-        await supabase.from('settings').update({
-          about_image_url: formattedUrl
-        }).eq('id', 'global');
-      } else {
-        const dbKey = type === 'logo' ? 'logo_url' : 
-                      type === 'rectorImage' ? 'rector_image_url' : 
-                      type === 'heroBg' ? 'hero_bg_url' : 
-                      type === 'liveStream' ? 'live_stream_url' :
-                      type === 'admissionFlyer' ? 'admission_flyer_url' :
-                      type;
-  
-        const { error } = await supabase.from('settings')
-          .update({ [dbKey]: formattedUrl })
-          .eq('id', 'global');
-          
-        if (error) {
-          // If update failed because row doesn't exist (rare), try upsert
-          const { error: upsertError } = await supabase.from('settings').upsert({
-            id: 'global',
-            [dbKey]: formattedUrl
-          });
-          if (upsertError) throw upsertError;
-        }
+        if (fallbackError) throw fallbackError;
       }
       
       await refreshSettings();
@@ -3105,6 +3093,56 @@ export default function AdminDashboard() {
                       </div>
 
                       <div className="p-6 border border-slate-100 rounded-xl bg-slate-50">
+                        <h3 className="font-bold text-slate-900 mb-4">Seminary Name</h3>
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            placeholder="e.g. Winning Gate Christian Theological Seminary" 
+                            className="flex-grow px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-600 outline-none"
+                            value={settings.schoolName}
+                            onChange={(e) => setSettings(prev => ({ ...prev, schoolName: e.target.value }))}
+                          />
+                          <button 
+                            onClick={async (e) => {
+                              const btn = e.currentTarget;
+                              const originalText = btn.innerText;
+                              btn.innerText = 'Saving...';
+                              btn.disabled = true;
+                              try {
+                                const { data: currentGlobal } = await supabase.from('settings').select('value').eq('id', 'global').maybeSingle();
+                                const v = { ...(currentGlobal?.value || {}) };
+                                v.school_name = settings.schoolName;
+                                
+                                const { error } = await supabase.from('settings').upsert({
+                                  id: 'global',
+                                  schoolName: settings.schoolName,
+                                  school_name: settings.schoolName,
+                                  value: v
+                                });
+                                if (error) {
+                                  // Fallback
+                                  await supabase.from('settings').update({ value: v }).eq('id', 'global');
+                                }
+                                await refreshSettings();
+                                showToast("School name updated!");
+                                btn.innerText = 'Saved!';
+                              } catch (err: any) {
+                                showToast(`Error: ${err.message}`, "error");
+                              } finally {
+                                setTimeout(() => {
+                                  btn.innerText = originalText;
+                                  btn.disabled = false;
+                                }, 3000);
+                              }
+                            }}
+                            className="bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors"
+                          >
+                            Save Name
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="p-6 border border-slate-100 rounded-xl bg-slate-50">
                         <h3 className="font-bold text-slate-900 mb-4">Seminary Logo</h3>
                         <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
                           <div className="w-24 h-24 shrink-0 bg-white border border-slate-200 rounded-lg flex items-center justify-center overflow-hidden">
@@ -3806,6 +3844,39 @@ export default function AdminDashboard() {
                                 onChange={(e) => setTestEmail(e.target.value)}
                               />
                             </div>
+                            <button 
+                              onClick={async () => {
+                                const btn = document.activeElement as HTMLButtonElement;
+                                const originalText = btn.innerText;
+                                btn.innerText = 'Testing...';
+                                btn.disabled = true;
+                                try {
+                                  // Refresh from DB first to get latest (if user just saved)
+                                  const response = await fetch('/api/test-smtp-verify');
+                                  const data = await response.json();
+                                  if (data.success) {
+                                    alert(`SMTP Verification Success: ${data.message}`);
+                                    btn.innerText = 'Verified!';
+                                    btn.classList.add('bg-green-600');
+                                  } else {
+                                    alert(`SMTP Verification Failed: ${data.error}\n\nHint: ${data.hint || ''}`);
+                                    btn.innerText = 'Setup Error';
+                                    btn.classList.add('bg-red-600');
+                                  }
+                                } catch(e: any) {
+                                  alert(`Error: ${e.message}`);
+                                } finally {
+                                  setTimeout(() => {
+                                    btn.innerText = originalText;
+                                    btn.disabled = false;
+                                    btn.classList.remove('bg-green-600', 'bg-red-600');
+                                  }, 5000);
+                                }
+                              }}
+                              className="px-4 py-2 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                            >
+                               <ShieldCheck size={16} /> Test Connection
+                            </button>
                             <button
                               onClick={handleTestEmail}
                               disabled={isTestingEmail}
@@ -3845,12 +3916,13 @@ export default function AdminDashboard() {
                             const newValue = { ...(existingData?.value || {}) };
                             let updatedValue = false;
                             
-                            const payload: any = {};
                             if (settings.flutterwavePublicKey && settings.flutterwavePublicKey.trim() !== '') {
-                              payload.flutterwave_public_key = settings.flutterwavePublicKey;
+                              newValue.flutterwave_public_key = settings.flutterwavePublicKey;
+                              updatedValue = true;
                             }
                             if (settings.siteUrl && settings.siteUrl.trim() !== '') {
-                              payload.site_url = settings.siteUrl;
+                              newValue.site_url = settings.siteUrl;
+                              updatedValue = true;
                             }
                             if (settings.cloudinaryUrl && settings.cloudinaryUrl.trim() !== '') {
                               newValue.cloudinary_url = settings.cloudinaryUrl;
@@ -3882,32 +3954,23 @@ export default function AdminDashboard() {
                             }
 
                             if (updatedValue) {
-                              payload.value = newValue;
-                            }
-                            
-                            if (Object.keys(payload).length > 0) {
                               let error;
                               
                               if (existingData) {
-                                const res = await supabase.from('settings').update(payload).eq('id', 'global');
+                                const res = await supabase.from('settings').update({ value: newValue }).eq('id', 'global');
                                 error = res.error;
                               } else {
-                                const res = await supabase.from('settings').insert({ id: 'global', ...payload });
+                                const res = await supabase.from('settings').insert({ id: 'global', value: newValue });
                                 error = res.error;
                               }
                               if (error) throw error;
                             }
                             
-                            // Clear inputs to make them completely invisible as requested
+                            // Clear only sensitive inputs
                             setSettings(prev => ({
                               ...prev,
-                              flutterwavePublicKey: '',
-                              siteUrl: '',
+                              smtpPass: '',
                               cloudinaryUrl: '',
-                              smtpHost: '',
-                              smtpPort: '',
-                              smtpUser: '',
-                              smtpPass: ''
                             }));
                             
                             if (btn) {

@@ -46,7 +46,7 @@ const TESTIMONIALS = [
 ];
 
 export default function Home() {
-  const { isAdmissionOpen, heroBgUrl, logoUrl, heroBanners, anthemUrl, anthemTitle, testimonials } = useSettings();
+  const { isAdmissionOpen, heroBgUrl, logoUrl, heroBanners, anthemUrl, anthemTitle, testimonials, loading } = useSettings();
   
   const currentTestimonials = testimonials && testimonials.length > 0 ? testimonials : TESTIMONIALS;
 
@@ -306,7 +306,19 @@ export default function Home() {
            </div>
            
            <div className="grid grid-cols-1 md:grid-cols-2 bg-white shadow-xl lg:grid-cols-4 gap-0 rounded-2xl overflow-hidden border border-slate-100">
-             {[
+             {loading ? (
+               [1, 2, 3, 4].map((i) => (
+                 <div key={i} className="flex flex-col border-b md:border-b-0 md:border-r border-slate-100 last:border-r-0 relative z-10 bg-white">
+                   <div className="h-48 overflow-hidden relative bg-slate-200 animate-pulse"></div>
+                   <div className="pt-12 pb-8 px-8 text-center flex flex-col flex-1">
+                     <div className="h-4 bg-slate-200 rounded w-3/4 mx-auto mb-4 animate-pulse"></div>
+                     <div className="h-3 bg-slate-200 rounded w-full mx-auto mb-2 animate-pulse"></div>
+                     <div className="h-3 bg-slate-200 rounded w-5/6 mx-auto mb-8 animate-pulse"></div>
+                     <div className="h-3 bg-slate-200 rounded w-1/2 mx-auto animate-pulse"></div>
+                   </div>
+                 </div>
+               ))
+             ) : [
                { image: heroBanners?.[0] ? formatImageUrl(heroBanners[0]) : "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80", icon: <BookOpen className="text-yellow-600 w-6 h-6"/>, title: "DIPLOMA\nIN THEOLOGY", desc: "Practical training for effective ministry." },
                { image: heroBanners?.[1] ? formatImageUrl(heroBanners[1]) : (heroBanners?.[0] ? formatImageUrl(heroBanners[0]) : "https://images.unsplash.com/photo-1523240795612-9a054b0db644?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"), icon: <GraduationCap className="text-yellow-600 w-6 h-6"/>, title: "BACHELOR\nOF THEOLOGY", desc: "In-depth study for leadership and ministry growth." },
                { image: heroBanners?.[2] ? formatImageUrl(heroBanners[2]) : (heroBanners?.[0] ? formatImageUrl(heroBanners[0]) : "https://images.unsplash.com/photo-1532012197267-da84d127e765?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"), icon: <Award className="text-yellow-600 w-6 h-6"/>, title: "MASTER\nOF THEOLOGY", desc: "Advanced studies for mature leaders." },
