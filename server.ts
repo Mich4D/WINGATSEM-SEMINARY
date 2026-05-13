@@ -364,6 +364,9 @@ async function getTransporter() {
     config.port = smtpPort;
     config.secure = smtpPort === 465;
   }
+  
+  // Force IPv4 to prevent ENETUNREACH in IPv6-restricted environments
+  config.family = 4;
 
   return nodemailer.createTransport(config);
 }

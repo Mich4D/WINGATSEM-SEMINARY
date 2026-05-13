@@ -3916,51 +3916,63 @@ export default function AdminDashboard() {
                             const newValue = { ...(existingData?.value || {}) };
                             let updatedValue = false;
                             
+                            const payload: any = {};
+                            
                             if (settings.flutterwavePublicKey && settings.flutterwavePublicKey.trim() !== '') {
+                              payload.flutterwave_public_key = settings.flutterwavePublicKey;
                               newValue.flutterwave_public_key = settings.flutterwavePublicKey;
                               updatedValue = true;
                             }
                             if (settings.siteUrl && settings.siteUrl.trim() !== '') {
+                              payload.site_url = settings.siteUrl;
                               newValue.site_url = settings.siteUrl;
                               updatedValue = true;
                             }
                             if (settings.cloudinaryUrl && settings.cloudinaryUrl.trim() !== '') {
                               newValue.cloudinary_url = settings.cloudinaryUrl;
+                              payload.cloudinary_url = settings.cloudinaryUrl;
                               updatedValue = true;
                             }
                             if (settings.smtpHost && settings.smtpHost.trim() !== '') {
                               newValue.smtp_host = settings.smtpHost;
+                              payload.smtp_host = settings.smtpHost;
                               updatedValue = true;
                             }
                             if (settings.smtpPort && settings.smtpPort.trim() !== '') {
                               newValue.smtp_port = settings.smtpPort;
+                              payload.smtp_port = settings.smtpPort;
                               updatedValue = true;
                             }
                             if (settings.smtpUser && settings.smtpUser.trim() !== '') {
                               newValue.smtp_user = settings.smtpUser;
+                              payload.smtp_user = settings.smtpUser;
                               updatedValue = true;
                             }
                             if (settings.smtpPass && settings.smtpPass.trim() !== '') {
                               newValue.smtp_pass = settings.smtpPass;
+                              payload.smtp_pass = settings.smtpPass;
                               updatedValue = true;
                             }
                             if (settings.smtpSender && settings.smtpSender.trim() !== '') {
                                newValue.smtp_sender = settings.smtpSender;
+                               payload.smtp_sender = settings.smtpSender;
                                updatedValue = true;
                             }
                             if (settings.smtpFrom && settings.smtpFrom.trim() !== '') {
                                newValue.smtp_from = settings.smtpFrom;
+                               payload.smtp_from = settings.smtpFrom;
                                updatedValue = true;
                             }
 
                             if (updatedValue) {
                               let error;
+                              payload.value = newValue;
                               
                               if (existingData) {
-                                const res = await supabase.from('settings').update({ value: newValue }).eq('id', 'global');
+                                const res = await supabase.from('settings').update(payload).eq('id', 'global');
                                 error = res.error;
                               } else {
-                                const res = await supabase.from('settings').insert({ id: 'global', value: newValue });
+                                const res = await supabase.from('settings').insert({ id: 'global', ...payload });
                                 error = res.error;
                               }
                               if (error) throw error;
