@@ -6,6 +6,11 @@ import path from "path";
 import { WebSocketServer, WebSocket } from "ws";
 import nodemailer from "nodemailer";
 import { createClient } from '@supabase/supabase-js';
+import dns from "node:dns";
+
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 
 dotenv.config({ override: true });
 
